@@ -13,13 +13,15 @@ class BLogger:
         self.logs = []
         self.current_log = None
         self.log_file = "logs.json"
+        self.script_dir = os.path.dirname(os.path.abspath(__file__))
         self.load_logs()
         self.banner = None
         self.load_banner()
 
     def load_banner(self):
         try:
-            with open('banner.txt', 'r') as f:
+            banner_path = os.path.join(self.script_dir, 'banner.txt')
+            with open(banner_path, 'r') as f:
                 self.banner = f.read()
         except FileNotFoundError:
             self.banner = "B-LOGGER\nYour Retro B-logging Companion"
