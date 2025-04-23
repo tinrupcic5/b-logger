@@ -132,7 +132,6 @@ class BLogger:
             input("\nPress Enter to continue...")
 
     def run(self):
-        self.display_banner()  # Display banner at startup
         while True:
             self.display_banner()  # Redisplay banner before menu
             print(self.term.black_on_white + "B-Logger" + self.term.normal)
