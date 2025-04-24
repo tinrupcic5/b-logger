@@ -12,8 +12,8 @@ class BLogger:
         self.term = Terminal()
         self.logs = []
         self.current_log = None
-        self.log_file = "logs.json"
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.log_file = os.path.join(self.script_dir, "logs.json")
         self.load_logs()
         self.banner = None
         self.load_banner()
@@ -38,6 +38,8 @@ class BLogger:
                 self.logs = json.load(f)
 
     def save_logs(self):
+        # Sort logs by date before saving (oldest first)
+        self.logs.sort(key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
         with open(self.log_file, 'w') as f:
             json.dump(self.logs, f, indent=2)
 
@@ -45,15 +47,28 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Create New Log" + self.term.normal)
         
-        ticket = input("Enter your log here: ")
-        description = input("Enter description: ")
+        # Ask about custom date
+        use_custom_date = input("Do you want to use a different date? (y/n): ").lower()
+        if use_custom_date == 'y':
+            while True:
+                try:
+                    custom_date = input("Enter date (DD.MM.YYYY): ")
+                    # Validate date format
+                    datetime.strptime(custom_date, "%d.%m.%Y")
+                    current_time = f"{custom_date} {datetime.now().strftime('%H:%M:%S')}"
+                    break
+                except ValueError:
+                    print("Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)")
+        else:
+            current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         
-        current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        ticket = input("Enter your log here: ")
+        hours = input("Enter hours: ")
         
         self.current_log = {
             "timestamp": current_time,
             "ticket": ticket,
-            "description": description,
+            "hours": hours,
             "q_status": "❌",
             "jira_status": "❌",
             "subtasks": []
@@ -65,7 +80,7 @@ class BLogger:
 
     def update_status(self):
         print(self.term.clear)
-        print(f"Current log: {self.current_log['ticket']} - {self.current_log['description']}")
+        print(f"Current log: {self.current_log['ticket']} - {self.current_log['hours']} hours")
         
         q_status = input("Update Q log status (x for ❌, c for ✅): ").lower()
         jira_status = input("Update Jira log status (x for ❌, c for ✅): ").lower()
@@ -90,8 +105,11 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Log History" + self.term.normal)
         
-        for i, log in enumerate(self.logs):
-            print(f"{i+1}. {log['timestamp']} {log['ticket']} - {log['description']} {log['q_status']} {log['jira_status']}")
+        # Sort logs by date before displaying (oldest first)
+        sorted_logs = sorted(self.logs, key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
+        
+        for i, log in enumerate(sorted_logs):
+            print(f"{i+1}. {log['timestamp']} {log['ticket']} - {log['hours']} hours {log['q_status']} {log['jira_status']}")
             if log['subtasks']:
                 for subtask in log['subtasks']:
                     print(f"   └─ {subtask}")
@@ -124,7 +142,7 @@ class BLogger:
                 confirm = input(f"Are you sure you want to delete log {log_index + 1}? (y/n): ").lower()
                 if confirm == 'y':
                     deleted_log = self.logs.pop(log_index)
-                    print(f"Deleted log: {deleted_log['ticket']} - {deleted_log['description']}")
+                    print(f"Deleted log: {deleted_log['ticket']} - {deleted_log['hours']} hours")
                     self.save_logs()
                     input("\nPress Enter to continue...")
         except ValueError:
@@ -132,6 +150,7 @@ class BLogger:
             input("\nPress Enter to continue...")
 
     def run(self):
+        self.display_banner()  # Display banner at startup
         while True:
             self.display_banner()  # Redisplay banner before menu
             print(self.term.black_on_white + "B-Logger" + self.term.normal)
