@@ -3,6 +3,8 @@
 import os
 import sys
 import json
+import signal
+import readline
 from datetime import datetime
 from blessed import Terminal
 from dateutil import parser
@@ -17,6 +19,22 @@ class BLogger:
         self.load_logs()
         self.banner = None
         self.load_banner()
+        self.running = True
+        
+        # Set up signal handler for Ctrl+C
+        signal.signal(signal.SIGINT, self.handle_exit)
+        
+        # Configure readline for better input handling
+        readline.parse_and_bind('bind ^[[D backward-char')
+        readline.parse_and_bind('bind ^[[C forward-char')
+        readline.parse_and_bind('bind ^[[A previous-history')
+        readline.parse_and_bind('bind ^[[B next-history')
+
+    def handle_exit(self, signum, frame):
+        """Handle clean exit on Ctrl+C"""
+        print("\nExiting B-LOGGER...")
+        self.running = False
+        sys.exit(0)
 
     def load_banner(self):
         try:
@@ -82,6 +100,12 @@ class BLogger:
         print(self.term.clear)
         print(f"Current log: {self.current_log['ticket']} - {self.current_log['hours']} hours")
         
+        # Ask if user wants to update hours
+        update_hours = input("Do you want to update hours? (y/n): ").lower()
+        if update_hours == 'y':
+            new_hours = input("Enter new hours: ")
+            self.current_log["hours"] = new_hours
+        
         q_status = input("Update Q log status (x for ❌, c for ✅): ").lower()
         jira_status = input("Update Jira log status (x for ❌, c for ✅): ").lower()
         
@@ -108,7 +132,16 @@ class BLogger:
         # Sort logs by date before displaying (oldest first)
         sorted_logs = sorted(self.logs, key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
         
+        current_date = None
         for i, log in enumerate(sorted_logs):
+            log_date = log['timestamp'].split()[0]
+            
+            # Add separator if date changes
+            if current_date is not None and log_date != current_date:
+                print("-" * 72)  # Separator line
+                print("-" * 72)  # Separator line
+            
+            current_date = log_date
             print(f"{i+1}. {log['timestamp']} {log['ticket']} - {log['hours']} hours {log['q_status']} {log['jira_status']}")
             if log['subtasks']:
                 for subtask in log['subtasks']:
@@ -149,10 +182,14 @@ class BLogger:
             print("Invalid input")
             input("\nPress Enter to continue...")
 
+    def reset_screen(self):
+        """Clear screen and show banner"""
+        print(self.term.clear)
+        self.display_banner()
+
     def run(self):
-        self.display_banner()  # Display banner at startup
-        while True:
-            self.display_banner()  # Redisplay banner before menu
+        self.reset_screen()
+        while self.running:
             print(self.term.black_on_white + "B-Logger" + self.term.normal)
             print("\n1. Create new log")
             print("2. View logs")
@@ -160,18 +197,27 @@ class BLogger:
             print("4. Delete log")
             print("5. Exit")
             
-            choice = input("\nEnter your choice (1-5): ")
-            
-            if choice == "1":
-                self.create_new_log()
-            elif choice == "2":
-                self.display_logs()
-                input("\nPress Enter to continue...")
-            elif choice == "3":
-                self.edit_log()
-            elif choice == "4":
-                self.delete_log()
-            elif choice == "5":
+            try:
+                choice = input("\nEnter your choice (1-5): ")
+                if choice == "1":
+                    self.create_new_log()
+                    self.reset_screen()
+                elif choice == "2":
+                    self.display_logs()
+                    input("\nPress Enter to continue...")
+                    self.reset_screen()
+                elif choice == "3":
+                    self.edit_log()
+                    self.reset_screen()
+                elif choice == "4":
+                    self.delete_log()
+                    self.reset_screen()
+                elif choice == "5":
+                    self.running = False
+                    break
+            except KeyboardInterrupt:
+                print("\nExiting B-LOGGER...")
+                self.running = False
                 break
 
 if __name__ == "__main__":
