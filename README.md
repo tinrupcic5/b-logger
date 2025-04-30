@@ -1,31 +1,16 @@
-   ```bash
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║  ███████████             ████                                                ║
-║ ░░███░░░░░███           ░░███                                                ║
-║  ░███    ░███            ░███   ██████   ███████  ███████  ██████  ████████  ║
-║  ░██████████  ██████████ ░███  ███░░███ ███░░███ ███░░███ ███░░███░░███░░███ ║
-║  ░███░░░░░███░░░░░░░░░░  ░███ ░███ ░███░███ ░███░███ ░███░███████  ░███ ░░░  ║
-║  ░███    ░███            ░███ ░███ ░███░███ ░███░███ ░███░███░░░   ░███      ║
-║  ███████████             █████░░██████ ░░███████░░███████░░██████  █████     ║
-║ ░░░░░░░░░░░             ░░░░░  ░░░░░░   ░░░░░███ ░░░░░███ ░░░░░░  ░░░░░      ║
-║                                         ███ ░███ ███ ░███                    ║
-║                                        ░░██████ ░░██████                     ║
-║                                         ░░░░░░   ░░░░░░                      ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝ 
-   ```
-A terminal-based time logging application that helps you track your work tasks and their status.
+# B-LOGGER
+
+A terminal-based logging application for tracking work hours and tasks.
 
 ## Features
 
-- 📝 Create and manage work logs with timestamps
-- ⏰ Track hours spent on tasks
-- ✅ Track 1 and 2 status for each task
-- 📋 Add subtasks to your logs
-- 📅 Support for custom dates
-- 🎨 Retro-style terminal interface
-- 💾 Persistent storage in JSON format
+- Create and manage work logs with timestamps
+- Track hours worked on different tasks
+- Mark tasks as completed in 1 and 2
+- Add subtasks to main tasks
+- View and edit existing logs
+- Calculate total hours worked per day
+- Support for custom dates
 
 ## Installation
 
@@ -35,71 +20,104 @@ git clone https://github.com/yourusername/b-logger.git
 cd b-logger
 ```
 
-2. Make the run script executable:
+2. Install dependencies:
 ```bash
-chmod +x run.sh
+pip install -r requirements.txt
 ```
 
-3. Add the alias to your shell configuration file (~/.zshrc or ~/.bashrc):
+3. Make the script executable:
 ```bash
-alias b-logger="/path/to/b-logger/run.sh"
-```
-
-4. Reload your shell configuration:
-```bash
-source ~/.zshrc  # or source ~/.bashrc
+chmod +x b_logger.py
 ```
 
 ## Usage
 
-Run the tool by typing:
+Run the application:
 ```bash
-b-logger
+./b_logger.py
 ```
 
-### Creating a New Log
+### Main Menu Options
 
-1. Select option 1 from the menu
-2. Choose whether to use today's date or a custom date
-3. Enter your task/ticket information
-4. Enter the hours spent
-5. Update 1 and 2 status (x for ❌, c for ✅)
-6. Optionally add subtasks
+1. **Create new log**
+   - Create a new work log entry
+   - Option to use custom date
+   - Track hours and task status
 
-### Viewing Logs
+2. **View logs**
+   - Display all logs sorted by date
+   - Shows total hours worked per day
+   - Includes subtasks and completion status
 
-- Select option 2 to view all logs
-- Logs are sorted by date (oldest first)
-- Each log shows:
-  - Timestamp
-  - Ticket/Task
-  - Hours spent
-  - 1 and 2 status
-  - Subtasks (if any)
+3. **Edit log**
+   - Modify existing log entries
+   - Update hours, status, or subtasks
 
-### Editing Logs
+4. **Delete log**
+   - Remove unwanted log entries
 
-1. Select option 3
-2. Choose the log number to edit
-3. Update the status and subtasks as needed
+5. **Exit**
+   - Close the application
 
-### Deleting Logs
+### How to Input Hours
 
-1. Select option 4
-2. Choose the log number to delete
-3. Confirm deletion
+When creating or editing a log, you can input hours in several formats:
+- `1h` - One hour
+- `30m` - Thirty minutes
+- `1h 30m` - One hour and thirty minutes
+- `ongoing` - For tasks still in progress
+
+Examples:
+```
+2h        # 2 hours
+45m       # 45 minutes
+1h 15m    # 1 hour and 15 minutes
+2h 30m    # 2 hours and 30 minutes
+ongoing   # Task in progress (not counted in totals)
+```
+
+### Status Indicators
+
+- ✅ - Task is completed
+- ❌ - Task is not completed
+
+Status can be set for both 1 and 2 separately.
+
+### Subtasks
+
+You can add multiple subtasks to any main task. They will be displayed indented under the main task in the log view.
+
+### Daily Totals
+
+The application automatically calculates and displays the total hours worked for each day at the end of that day's logs. The total is shown in the format:
+```
+Total for DD.MM.YYYY: Xh Ym
+```
+
+### Custom Dates
+
+When creating a new log, you can choose to use a custom date instead of the current date. The date should be entered in the format:
+```
+DD.MM.YYYY
+```
+Example: `28.04.2024`
 
 ## Data Storage
 
-- Logs are stored in `logs.json` in the same directory as the script
-- The file is automatically created when you add your first log
-- Logs are sorted by date when saved
+All logs are stored in `logs.json` in the application directory. The file is automatically created when you make your first log entry.
+
+## Keyboard Navigation
+
+- Use arrow keys to navigate through input history
+- Use backspace to delete characters
+- Press Enter to confirm inputs
 
 ## Requirements
 
 - Python 3.x
-- Required Python packages (automatically installed):
-  - blessed
-  - python-dateutil
+- blessed
+- dateutil
 
 ## License
+
+MIT License

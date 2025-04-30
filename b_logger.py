@@ -81,7 +81,7 @@ class BLogger:
             current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         
         ticket = input("Enter your log here: ")
-        hours = input("Enter hours: ")
+        hours = input("Enter hours (e.g., 1h 30m or just 30m): ")
         
         self.current_log = {
             "timestamp": current_time,
@@ -125,6 +125,50 @@ class BLogger:
                 print(f"{i}. {task}")
             print()  # Add empty line for better readability
 
+    def parse_hours(self, hours_str):
+        """Parse hours string into total minutes"""
+        if not hours_str or hours_str.lower() == 'ongoing':
+            return 0
+        
+        total_minutes = 0
+        hours_str = hours_str.lower().replace('hours', '').strip()
+        
+        # Handle hours
+        if 'h' in hours_str:
+            hours_part = hours_str.split('h')[0]
+            try:
+                total_minutes += int(hours_part.strip()) * 60
+            except ValueError:
+                pass
+        elif hours_str.isdigit():
+            # Handle case like "1 hours"
+            try:
+                total_minutes += int(hours_str.strip()) * 60
+            except ValueError:
+                pass
+        
+        # Handle minutes
+        if 'm' in hours_str:
+            minutes_part = hours_str.split('m')[0]
+            if 'h' in minutes_part:
+                minutes_part = minutes_part.split('h')[-1]
+            try:
+                total_minutes += int(minutes_part.strip())
+            except ValueError:
+                pass
+        
+        return total_minutes
+
+    def format_hours(self, total_minutes):
+        """Format total minutes into hours and minutes string"""
+        if total_minutes == 0:
+            return ""
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        if minutes == 0:
+            return f"{hours}h"
+        return f"{hours}h {minutes}m"
+
     def display_logs(self):
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Log History" + self.term.normal)
@@ -133,19 +177,33 @@ class BLogger:
         sorted_logs = sorted(self.logs, key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
         
         current_date = None
+        day_total_minutes = 0
+        
         for i, log in enumerate(sorted_logs):
             log_date = log['timestamp'].split()[0]
             
-            # Add separator if date changes
+            # Add separator and total hours if date changes
             if current_date is not None and log_date != current_date:
+                total_hours = self.format_hours(day_total_minutes)
+                if total_hours:
+                    print(f"\nTotal for {current_date}: {total_hours}")
                 print("-" * 72)  # Separator line
-                print("-" * 72)  # Separator line
+                print("-" * 72)  # Separator lin
+                day_total_minutes = 0
             
             current_date = log_date
             print(f"{i+1}. {log['timestamp']} {log['ticket']} - {log['hours']} hours {log['q_status']} {log['jira_status']}")
             if log['subtasks']:
                 for subtask in log['subtasks']:
                     print(f"   └─ {subtask}")
+            
+            # Add to day total
+            day_total_minutes += self.parse_hours(log['hours'])
+        
+        # Add total for the last day
+        if day_total_minutes > 0:
+            total_hours = self.format_hours(day_total_minutes)
+            print(f"\nTotal for {current_date}: {total_hours}")
 
     def edit_log(self):
         print(self.term.clear)
@@ -187,6 +245,50 @@ class BLogger:
         print(self.term.clear)
         self.display_banner()
 
+    def display_help(self):
+        """Display help information"""
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "B-LOGGER Help" + self.term.normal)
+        print("\n" + self.term.underline + "Main Features:" + self.term.normal)
+        print("1. Create and manage work logs with timestamps")
+        print("2. Track hours worked on different tasks")
+        print("3. Mark tasks as completed in 1 and 2")
+        print("4. Add subtasks to main tasks")
+        print("5. View and edit existing logs")
+        print("6. Calculate total hours worked per day")
+        print("7. Support for custom dates")
+        
+        print("\n" + self.term.underline + "How to Input Hours:" + self.term.normal)
+        print("You can input hours in several formats:")
+        print("- 1h        - One hour")
+        print("- 30m       - Thirty minutes")
+        print("- 1h 30m    - One hour and thirty minutes")
+        print("- ongoing   - For tasks still in progress")
+        
+        print("\n" + self.term.underline + "Examples:" + self.term.normal)
+        print("2h        # 2 hours")
+        print("45m       # 45 minutes")
+        print("1h 15m    # 1 hour and 15 minutes")
+        print("2h 30m    # 2 hours and 30 minutes")
+        print("ongoing   # Task in progress (not counted in totals)")
+        
+        print("\n" + self.term.underline + "Status Indicators:" + self.term.normal)
+        print("✅ - Task is completed")
+        print("❌ - Task is not completed")
+        print("Status can be set for both 1 and 2 separately")
+        
+        print("\n" + self.term.underline + "Custom Dates:" + self.term.normal)
+        print("When creating a new log, you can use a custom date")
+        print("Format: DD.MM.YYYY")
+        print("Example: 28.04.2024")
+        
+        print("\n" + self.term.underline + "Keyboard Navigation:" + self.term.normal)
+        print("- Use arrow keys to navigate through input history")
+        print("- Use backspace to delete characters")
+        print("- Press Enter to confirm inputs")
+        
+        input("\nPress Enter to return to main menu...")
+
     def run(self):
         self.reset_screen()
         while self.running:
@@ -195,10 +297,11 @@ class BLogger:
             print("2. View logs")
             print("3. Edit log")
             print("4. Delete log")
-            print("5. Exit")
+            print("5. Help")
+            print("6. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-5): ")
+                choice = input("\nEnter your choice (1-6): ")
                 if choice == "1":
                     self.create_new_log()
                     self.reset_screen()
@@ -213,6 +316,9 @@ class BLogger:
                     self.delete_log()
                     self.reset_screen()
                 elif choice == "5":
+                    self.display_help()
+                    self.reset_screen()
+                elif choice == "6":
                     self.running = False
                     break
             except KeyboardInterrupt:
