@@ -192,7 +192,7 @@ class BLogger:
                 day_total_minutes = 0
             
             current_date = log_date
-            print(f"{i+1}. {log['timestamp']} {log['ticket']} - {log['hours']} hours {log['q_status']} {log['jira_status']}")
+            print(f"{i+1}. {log['timestamp']} {log['ticket']} - {log['hours']} hours [Q-> {log['q_status']}] [J-> {log['jira_status']}]")
             if log['subtasks']:
                 for subtask in log['subtasks']:
                     print(f"   └─ {subtask}")
