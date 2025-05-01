@@ -16,7 +16,8 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝ 
    ```
 
-A terminal-based logging application for tracking work hours and tasks.
+A terminal-based logging application for tracking work hours and tasks for two different logging apps.
+- Example: JIRA_Ticket_1 - Working on ticket ✅ ❌   -> (Logged time in organization app, but did not log time in Jira)
 
 ## Features
 
