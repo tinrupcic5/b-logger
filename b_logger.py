@@ -187,8 +187,8 @@ class BLogger:
                 total_hours = self.format_hours(day_total_minutes)
                 if total_hours:
                     print(f"\nTotal for {current_date}: {total_hours}")
-                print("-" * 72)  # Separator line
-                print("-" * 72)  # Separator lin
+                    print("-" * 72)  # Separator line after total
+                print("-" * 72)  # Separator line between days
                 day_total_minutes = 0
             
             current_date = log_date
@@ -204,17 +204,30 @@ class BLogger:
         if day_total_minutes > 0:
             total_hours = self.format_hours(day_total_minutes)
             print(f"\nTotal for {current_date}: {total_hours}")
+            print("-" * 72)  # Separator line after total
 
     def edit_log(self):
         print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Edit Log" + self.term.normal)
         self.display_logs()
         try:
-            log_index = int(input("Enter log number to edit (0 to cancel): ")) - 1
+            log_index = int(input("\nEnter log number to edit (0 to cancel): ")) - 1
             if log_index == -1:
                 return
             
             if 0 <= log_index < len(self.logs):
+                print(self.term.clear)  # Clear screen after log selection
+                print(self.term.move_y(0) + self.term.black_on_white + f"Editing Log {log_index + 1}" + self.term.normal)
                 self.current_log = self.logs[log_index]
+                
+                # Ask if user wants to edit description
+                edit_desc = input("Do you want to edit the description? (y/n): ").lower()
+                if edit_desc == 'y':
+                    print(f"\nCurrent description: {self.current_log['ticket']}")
+                    new_desc = input("Enter new description: ")
+                    if new_desc.strip():  # Only update if new description is not empty
+                        self.current_log["ticket"] = new_desc
+                
                 self.update_status()
                 self.logs[log_index] = self.current_log
                 self.save_logs()
