@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Get the absolute path of the script's directory
-SCRIPT_DIR="/Users/tinrupcic/Development/tools/b-logger"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Check if Python 3 is installed
 if ! command -v python3 &> /dev/null; then
@@ -30,4 +30,4 @@ echo "Installing dependencies..."
 "$SCRIPT_DIR/venv/bin/python3" -m pip install -r "$SCRIPT_DIR/requirements.txt"
 
 # Run the application using the virtual environment's Python
-"$SCRIPT_DIR/venv/bin/python3" "$SCRIPT_DIR/b_logger.py" 
+"$SCRIPT_DIR/venv/bin/python3" "$SCRIPT_DIR/b_logger.py"
