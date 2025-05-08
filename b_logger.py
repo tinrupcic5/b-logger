@@ -186,7 +186,11 @@ class BLogger:
             if current_date is not None and log_date != current_date:
                 total_hours = self.format_hours(day_total_minutes)
                 if total_hours:
-                    print(f"\nTotal for {current_date}: {total_hours}")
+                    # Check if total is exactly 8h
+                    if day_total_minutes == 480:  # 8 hours = 480 minutes
+                        print(f"\nTotal for {current_date}: {self.term.green(total_hours)}")
+                    else:
+                        print(f"\nTotal for {current_date}: {self.term.red(total_hours)}")
                     print("-" * 72)  # Separator line after total
                 print("-" * 72)  # Separator line between days
                 day_total_minutes = 0
@@ -203,7 +207,11 @@ class BLogger:
         # Add total for the last day
         if day_total_minutes > 0:
             total_hours = self.format_hours(day_total_minutes)
-            print(f"\nTotal for {current_date}: {total_hours}")
+            # Check if total is exactly 8h
+            if day_total_minutes == 480:  # 8 hours = 480 minutes
+                print(f"\nTotal for {current_date}: {self.term.green(total_hours)}")
+            else:
+                print(f"\nTotal for {current_date}: {self.term.red(total_hours)}")
             print("-" * 72)  # Separator line after total
 
     def edit_log(self):
