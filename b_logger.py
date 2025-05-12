@@ -5,7 +5,7 @@ import sys
 import json
 import signal
 import readline
-from datetime import datetime
+from datetime import datetime, timedelta
 from blessed import Terminal
 from dateutil import parser
 
@@ -310,6 +310,202 @@ class BLogger:
         
         input("\nPress Enter to return to main menu...")
 
+    def mark_as_checked(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Mark Log as Checked" + self.term.normal)
+        self.display_logs()
+        try:
+            log_index = int(input("\nEnter log number to mark as checked (0 to cancel): ")) - 1
+            if log_index == -1:
+                return
+            
+            if 0 <= log_index < len(self.logs):
+                self.logs[log_index]["q_status"] = "✅"
+                self.logs[log_index]["jira_status"] = "✅"
+                print(f"\nMarked log {log_index + 1} as checked for both Q and Jira.")
+                self.save_logs()
+                
+                # Ask if user wants to mark another log
+                while True:
+                    another = input("\nDo you want to mark another log as checked? (y/n): ").lower()
+                    if another == 'y':
+                        self.mark_as_checked()
+                        break
+                    elif another == 'n':
+                        break
+                    else:
+                        print("Please enter 'y' or 'n'")
+        except ValueError:
+            print("Invalid input")
+            input("\nPress Enter to continue...")
+
+    def edit_subtasks(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Edit Subtasks" + self.term.normal)
+        self.display_logs()
+        try:
+            log_index = int(input("\nEnter log number to edit subtasks (0 to cancel): ")) - 1
+            if log_index == -1:
+                return
+            
+            if 0 <= log_index < len(self.logs):
+                log = self.logs[log_index]
+                if not log['subtasks']:
+                    print("\nThis log has no subtasks.")
+                    input("\nPress Enter to continue...")
+                    return
+                
+                print(f"\nCurrent subtasks for log {log_index + 1}:")
+                for i, subtask in enumerate(log['subtasks'], 1):
+                    print(f"{i}. {subtask}")
+                
+                while True:
+                    subtask_input = input("\nEnter subtask number to edit (press Enter to finish): ").strip()
+                    if not subtask_input:  # If user just presses Enter
+                        break
+                    
+                    try:
+                        subtask_index = int(subtask_input) - 1
+                        if 0 <= subtask_index < len(log['subtasks']):
+                            print(f"\nCurrent subtask: {log['subtasks'][subtask_index]}")
+                            new_subtask = input("Enter new subtask description: ")
+                            if new_subtask.strip():
+                                log['subtasks'][subtask_index] = new_subtask
+                                print("Subtask updated successfully!")
+                            else:
+                                print("Subtask description cannot be empty!")
+                        else:
+                            print("Invalid subtask number!")
+                    except ValueError:
+                        print("Please enter a valid number!")
+                
+                self.save_logs()
+                print("\nChanges saved successfully!")
+                input("\nPress Enter to continue...")
+        except ValueError:
+            print("Invalid input")
+            input("\nPress Enter to continue...")
+
+    def get_sprint_dates(self, sprint_number):
+        """Get start and end dates for a specific sprint number (0 is current sprint, -1 is previous, etc.)"""
+        # Define the first sprint start date
+        first_sprint_start = datetime(2025, 4, 30)
+        
+        # Calculate sprint dates based on sprint number
+        sprint_start = first_sprint_start + timedelta(days=14 * sprint_number)
+        sprint_end = sprint_start + timedelta(days=13)  # Sprint ends 13 days after start
+        
+        return sprint_start, sprint_end
+
+    def view_sprint_history(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Sprint History" + self.term.normal)
+        
+        if not self.logs:
+            print("\nNo logs found.")
+            input("\nPress Enter to continue...")
+            return
+            
+        # Find the earliest and latest log dates
+        log_dates = [datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y") for log in self.logs]
+        earliest_date = min(log_dates)
+        latest_date = max(log_dates)
+        
+        # Calculate sprint numbers
+        first_sprint_start = datetime(2025, 4, 30)
+        days_since_first_sprint = (earliest_date - first_sprint_start).days
+        sprints_back = abs(days_since_first_sprint // 14)  # How many sprints before April 30, 2025
+        
+        days_since_first_sprint = (latest_date - first_sprint_start).days
+        sprints_forward = days_since_first_sprint // 14  # How many sprints after April 30, 2025
+        
+        # Show sprints from earliest to latest with logs
+        for i in range(-sprints_back, sprints_forward + 1):
+            sprint_start, sprint_end = self.get_sprint_dates(i)
+            
+            # Filter logs within sprint period
+            sprint_logs = []
+            for log in self.logs:
+                log_date = datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y")
+                if sprint_start <= log_date <= sprint_end:
+                    sprint_logs.append(log)
+            
+            # Show sprint if it has logs or is in the past
+            if sprint_logs or sprint_end < datetime.now():
+                print(f"\nSprint Period: {sprint_start.strftime('%d.%m.%Y')} - {sprint_end.strftime('%d.%m.%Y')}")
+                
+                if sprint_logs:
+                    # Sort logs by date
+                    sprint_logs.sort(key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
+                    
+                    # Group logs by date
+                    current_date = None
+                    for log in sprint_logs:
+                        log_date = log['timestamp'].split()[0]
+                        if current_date != log_date:
+                            current_date = log_date
+                            print(f"\n  {self.term.yellow(current_date)}")
+                        print(f"    {self.term.cyan(log['ticket'])}")
+                else:
+                    print("  No logs found for this sprint")
+                
+                print("-" * 72)
+        
+        input("\nPress Enter to continue...")
+
+    def view_sprint_logs(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Current Sprint Logs" + self.term.normal)
+        
+        sprint_start, sprint_end = self.get_sprint_dates(0)
+        print(f"\nSprint Period: {sprint_start.strftime('%d.%m.%Y')} - {sprint_end.strftime('%d.%m.%Y')}")
+        print("-" * 72)
+        
+        # Filter logs within sprint period
+        sprint_logs = []
+        for log in self.logs:
+            log_date = datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y")
+            if sprint_start <= log_date <= sprint_end:
+                sprint_logs.append(log)
+        
+        if not sprint_logs:
+            print("\nNo logs found for the current sprint.")
+            input("\nPress Enter to continue...")
+            return
+        
+        # Get distinct QI- logs
+        qi_logs = {}  # Use dict to store unique QI numbers
+        for log in sprint_logs:
+            if log['ticket'].startswith('QI-'):
+                # Extract QI number (everything before the first space or [)
+                qi_number = log['ticket'].split()[0].split('[')[0]
+                # Keep the version with [Q] if it exists, otherwise keep the first one
+                if '[Q]' in log['ticket'] or qi_number not in qi_logs:
+                    qi_logs[qi_number] = log['ticket']
+        
+        # Display QI logs first
+        if qi_logs:
+            print("\nQI Tickets:")
+            for qi_log in sorted(qi_logs.values()):
+                print(f"  {self.term.cyan(qi_log)}")
+            print("-" * 72)
+        
+        # Display all logs sorted by date
+        print("\nOther Logs:")
+        # Sort logs by date
+        sprint_logs.sort(key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
+        
+        # Group logs by date
+        current_date = None
+        for log in sprint_logs:
+            log_date = log['timestamp'].split()[0]
+            if current_date != log_date:
+                current_date = log_date
+                print(f"\n  {self.term.yellow(current_date)}")
+            print(f"    {self.term.cyan(log['ticket'])}")
+        
+        input("\nPress Enter to continue...")
+
     def run(self):
         self.reset_screen()
         while self.running:
@@ -318,11 +514,15 @@ class BLogger:
             print("2. View logs")
             print("3. Edit log")
             print("4. Delete log")
-            print("5. Help")
-            print("6. Exit")
+            print("5. Mark as checked")
+            print("6. Edit subtasks")
+            print("7. View current sprint")
+            print("8. View sprint history")
+            print("9. Help")
+            print("10. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-6): ")
+                choice = input("\nEnter your choice (1-10): ")
                 if choice == "1":
                     self.create_new_log()
                     self.reset_screen()
@@ -337,9 +537,21 @@ class BLogger:
                     self.delete_log()
                     self.reset_screen()
                 elif choice == "5":
-                    self.display_help()
+                    self.mark_as_checked()
                     self.reset_screen()
                 elif choice == "6":
+                    self.edit_subtasks()
+                    self.reset_screen()
+                elif choice == "7":
+                    self.view_sprint_logs()
+                    self.reset_screen()
+                elif choice == "8":
+                    self.view_sprint_history()
+                    self.reset_screen()
+                elif choice == "9":
+                    self.display_help()
+                    self.reset_screen()
+                elif choice == "10":
                     self.running = False
                     break
             except KeyboardInterrupt:
