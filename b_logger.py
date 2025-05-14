@@ -314,15 +314,32 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Mark Log as Checked" + self.term.normal)
         self.display_logs()
+        
+        # Ask which status to update
+        while True:
+            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both): ").lower()
+            if status_choice in ['q', 'j', 'b']:
+                break
+            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, or 'b' for Both.")
+        
         try:
             log_index = int(input("\nEnter log number to mark as checked (0 to cancel): ")) - 1
             if log_index == -1:
                 return
             
             if 0 <= log_index < len(self.logs):
-                self.logs[log_index]["q_status"] = "✅"
-                self.logs[log_index]["jira_status"] = "✅"
-                print(f"\nMarked log {log_index + 1} as checked for both Q and Jira.")
+                if status_choice in ['q', 'b']:
+                    self.logs[log_index]["q_status"] = "✅"
+                if status_choice in ['j', 'b']:
+                    self.logs[log_index]["jira_status"] = "✅"
+                
+                status_updated = []
+                if status_choice in ['q', 'b']:
+                    status_updated.append("Q")
+                if status_choice in ['j', 'b']:
+                    status_updated.append("Jira")
+                
+                print(f"\nMarked log {log_index + 1} as checked for {', '.join(status_updated)}.")
                 self.save_logs()
                 
                 # Ask if user wants to mark another log
@@ -330,6 +347,52 @@ class BLogger:
                     another = input("\nDo you want to mark another log as checked? (y/n): ").lower()
                     if another == 'y':
                         self.mark_as_checked()
+                        break
+                    elif another == 'n':
+                        break
+                    else:
+                        print("Please enter 'y' or 'n'")
+        except ValueError:
+            print("Invalid input")
+            input("\nPress Enter to continue...")
+
+    def mark_as_unchecked(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Mark Log as Unchecked" + self.term.normal)
+        self.display_logs()
+        
+        # Ask which status to update
+        while True:
+            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both): ").lower()
+            if status_choice in ['q', 'j', 'b']:
+                break
+            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, or 'b' for Both.")
+        
+        try:
+            log_index = int(input("\nEnter log number to mark as unchecked (0 to cancel): ")) - 1
+            if log_index == -1:
+                return
+            
+            if 0 <= log_index < len(self.logs):
+                if status_choice in ['q', 'b']:
+                    self.logs[log_index]["q_status"] = "❌"
+                if status_choice in ['j', 'b']:
+                    self.logs[log_index]["jira_status"] = "❌"
+                
+                status_updated = []
+                if status_choice in ['q', 'b']:
+                    status_updated.append("Q")
+                if status_choice in ['j', 'b']:
+                    status_updated.append("Jira")
+                
+                print(f"\nMarked log {log_index + 1} as unchecked for {', '.join(status_updated)}.")
+                self.save_logs()
+                
+                # Ask if user wants to mark another log
+                while True:
+                    another = input("\nDo you want to mark another log as unchecked? (y/n): ").lower()
+                    if another == 'y':
+                        self.mark_as_unchecked()
                         break
                     elif another == 'n':
                         break
@@ -504,7 +567,7 @@ class BLogger:
                 print(f"\n  {self.term.yellow(current_date)}")
             print(f"    {self.term.cyan(log['ticket'])}")
         
-        input("\nPress Enter to continue...")
+            input("\nPress Enter to continue...")
 
     def run(self):
         self.reset_screen()
@@ -515,14 +578,15 @@ class BLogger:
             print("3. Edit log")
             print("4. Delete log")
             print("5. Mark as checked")
-            print("6. Edit subtasks")
-            print("7. View current sprint")
-            print("8. View sprint history")
-            print("9. Help")
-            print("10. Exit")
+            print("6. Mark as unchecked")
+            print("7. Edit subtasks")
+            print("8. View current sprint")
+            print("9. View sprint history")
+            print("10. Help")
+            print("11. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-10): ")
+                choice = input("\nEnter your choice (1-11): ")
                 if choice == "1":
                     self.create_new_log()
                     self.reset_screen()
@@ -540,18 +604,21 @@ class BLogger:
                     self.mark_as_checked()
                     self.reset_screen()
                 elif choice == "6":
-                    self.edit_subtasks()
+                    self.mark_as_unchecked()
                     self.reset_screen()
                 elif choice == "7":
-                    self.view_sprint_logs()
+                    self.edit_subtasks()
                     self.reset_screen()
                 elif choice == "8":
-                    self.view_sprint_history()
+                    self.view_sprint_logs()
                     self.reset_screen()
                 elif choice == "9":
-                    self.display_help()
+                    self.view_sprint_history()
                     self.reset_screen()
                 elif choice == "10":
+                    self.display_help()
+                    self.reset_screen()
+                elif choice == "11":
                     self.running = False
                     break
             except KeyboardInterrupt:

@@ -1,0 +1,387 @@
+[
+  {
+    "timestamp": "24.04.2025 15:55:54",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "24.04.2025 15:56:16",
+    "ticket": "QI-11611 - Implement Advanced Sorting Logic for Work History Records",
+    "hours": "7h 30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "adjust WorkHistory service",
+      "create WorkHistorySortingStrategy class",
+      "add comparator for sorting work history records ",
+      "adjust logic for comparing dates and ids"
+    ]
+  },
+  {
+    "timestamp": "25.04.2025 09:29:18",
+    "ticket": "Takamol 4 - Daily+Backlog refinement",
+    "hours": "1h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "25.04.2025 12:57:42",
+    "ticket": "QI-11611 - Implement Advanced Sorting Logic for Work History Records",
+    "hours": "7h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "adjust tests",
+      "adjust WorkHistorySortingStrategy",
+      "test sorting mechanism",
+      "compare response jsons of users",
+      "create MR"
+    ]
+  },
+  {
+    "timestamp": "28.04.2025 10:48:20",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "28.04.2025 10:49:42",
+    "ticket": "QI-11661 Default Cover Photo Assignment for New Users",
+    "hours": "6h 30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "add coverPhoto value 0 to employee info entity to insert default value",
+      "add logic to get id0 of cover photo in employee info service",
+      "create tests"
+    ]
+  },
+  {
+    "timestamp": "28.04.2025 11:36:57",
+    "ticket": "support Add WorkHistoryID to Contact References endpoints",
+    "hours": "1",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "database migration for Lookup_ContactReferenceRelationship create",
+      "add note in migration table"
+    ]
+  },
+  {
+    "timestamp": "29.04.2025 10:34:02",
+    "ticket": "support Anna on QI-11246  Migrate to new Contract Management V2 API ",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "29.04.2025 11:41:14",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "29.04.2025 11:42:16",
+    "ticket": "QI-11661 Default Cover Photo Assignment for New Users",
+    "hours": "6h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "add tests",
+      "resolve sonar issues"
+    ]
+  },
+  {
+    "timestamp": "29.04.2025 15:44:41",
+    "ticket": "Demo, Sprint review - BE - Individuals",
+    "hours": "1h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "30.04.2025 09:25:09",
+    "ticket": "Support Anna Kajtoch on work history from CM",
+    "hours": "1h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "after termination of CM contract and the end date updated correctly, however the flag completed is still set to false"
+    ]
+  },
+  {
+    "timestamp": "30.04.2025 10:51:15",
+    "ticket": "Individuals - Takamol-Q-TSH tech sync",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "30.04.2025 10:52:21",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "30.04.2025 10:54:28",
+    "ticket": "QI-11611 Implement Advanced Sorting Logic for Work History Records",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "put WorkHistoryComparator as inner class into WorkHistoryService",
+      "rename WorkHistorySortingStrategyTest into WorkHistoryComparatorTest",
+      "rename WorkHistorySortingStrategy into WorkHistoryComparator"
+    ]
+  },
+  {
+    "timestamp": "30.04.2025 10:55:45",
+    "ticket": "QI-11661 Default Cover Photo Assignment for New Users",
+    "hours": "4",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "add missing tests"
+    ]
+  },
+  {
+    "timestamp": "30.04.2025 14:03:45",
+    "ticket": "Error - Violation of UNIQUE KEY UNQ_EmployeeInfo_LaborerId - PROD",
+    "hours": "1h 30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "02.05.2025 10:23:43",
+    "ticket": "QI-11661 [Q] Default Cover Photo Assignment for New Users",
+    "hours": "7",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "add test to cover sonar issues",
+      "cover sonar test issues"
+    ]
+  },
+  {
+    "timestamp": "02.05.2025 10:50:09",
+    "ticket": "Qiwa Individual - BE daily (Friday Edition)",
+    "hours": "1h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "05.05.2025 14:41:17",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "05.05.2025 14:41:46",
+    "ticket": "QI-11661 Default Cover Photo Assignment for New Users",
+    "hours": "7h 30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "add tests to cover code",
+      "resolve sonar issues"
+    ]
+  },
+  {
+    "timestamp": "06.05.2025 09:51:46",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "06.05.2025 09:52:06",
+    "ticket": "QI-11362 [Q] Occupation selection when Opting for Relocation",
+    "hours": "2",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "investigate how to implement ticket"
+    ]
+  },
+  {
+    "timestamp": "06.05.2025 14:26:20",
+    "ticket": "QI-5669 [Q] Integration tests - experience certificate",
+    "hours": "5h 30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "07.05.2025 11:30:41",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "07.05.2025 11:30:54",
+    "ticket": "1-1 Tin/Aaron",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "07.05.2025 10:14:54",
+    "ticket": "QI-5669 [Q] Integration tests - experience certificate",
+    "hours": "7h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "add tests",
+      "add new schema to create table",
+      "adjust test config"
+    ]
+  },
+  {
+    "timestamp": "08.05.2025 10:56:41",
+    "ticket": "QI-5669 [Q] Integration tests - experience certificate",
+    "hours": "6h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "populate TestConfig with experience certificate",
+      "add ExperienceCertificateServiceIntegrationTest",
+      "create tests",
+      "add table to test schema"
+    ]
+  },
+  {
+    "timestamp": "08.05.2025 10:58:58",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "08.05.2025 09:36:51",
+    "ticket": "QI-11709 [Q] Align Attachment Systems (cont.) - Filename Normalization",
+    "hours": "1h 30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "investigate ticket and old implementation",
+      "add columns to script",
+      "start working on New columns to attachment tables 1"
+    ]
+  },
+  {
+    "timestamp": "09.05.2025 13:29:47",
+    "ticket": "Takamol 4 - Daily+Backlog refinement",
+    "hours": "1h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "09.05.2025 13:31:07",
+    "ticket": "QI-11712 [Q] Support new columns of the Attachments table",
+    "hours": "3h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "add MigratedS3Key, IsFileNameNormalized and CreatedAt to AttachmentEntity",
+      "modify the getAwsS3Key() method to use MigratedS3Key instead of FileName",
+      "add test"
+    ]
+  },
+  {
+    "timestamp": "09.05.2025 14:32:42",
+    "ticket": "QI-11710 Implement Normalized Attachment Filename Generation",
+    "hours": "4",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "create AttachmentFilenameNormalizer",
+      "create logic for IsFileNameNormalized in AttachmentEntity",
+      "add dependencies",
+      "add test"
+    ]
+  },
+  {
+    "timestamp": "12.05.2025 13:56:56",
+    "ticket": "QI-11710 [Q] Implement Normalized Attachment Filename Generation",
+    "hours": "6h 30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "\u00a0 - resolve sonar issues",
+      "adjust normalizer",
+      "add tests"
+    ]
+  },
+  {
+    "timestamp": "12.05.2025 13:58:42",
+    "ticket": "Amir Lenkiewicz Support ",
+    "hours": "1h",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": [
+      "investigate Database Error on stage"
+    ]
+  },
+  {
+    "timestamp": "12.05.2025 16:36:13",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u2705",
+    "jira_status": "\u2705",
+    "subtasks": []
+  },
+  {
+    "timestamp": "13.05.2025 10:56:13",
+    "ticket": "Qiwa Individual - BE Daily",
+    "hours": "30m",
+    "q_status": "\u274c",
+    "jira_status": "\u274c",
+    "subtasks": []
+  },
+  {
+    "timestamp": "13.05.2025 15:16:56",
+    "ticket": "Java Biweekly",
+    "hours": "30m",
+    "q_status": "\u274c",
+    "jira_status": "\u274c",
+    "subtasks": []
+  },
+  {
+    "timestamp": "13.05.2025 15:17:20",
+    "ticket": "Demo, Sprint review - BE - Individuals",
+    "hours": "1h",
+    "q_status": "\u274c",
+    "jira_status": "\u274c",
+    "subtasks": []
+  },
+  {
+    "timestamp": "13.05.2025 15:17:46",
+    "ticket": "QI-11710 [Q] Implement Normalized Attachment Filename Generation",
+    "hours": "6h",
+    "q_status": "\u274c",
+    "jira_status": "\u274c",
+    "subtasks": []
+  }
+]

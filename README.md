@@ -63,9 +63,9 @@ When creating a new log, you can use a custom date:
    pip install -r requirements.txt
    ```
 3. Run the application:
-   ```bash
-   python b_logger.py
-   ```
+```bash
+python b_logger.py
+```
 
 ## Requirements
 
