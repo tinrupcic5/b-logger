@@ -66,22 +66,37 @@ class BLogger:
         print(self.term.move_y(0) + self.term.black_on_white + "Create New Log" + self.term.normal)
         
         # Ask about custom date
-        use_custom_date = input("Do you want to use a different date? (y/n): ").lower()
+        while True:
+            use_custom_date = input("Do you want to use a different date? (y/n): ").lower()
+            if use_custom_date in ['0', 'exit']:
+                return
+            if use_custom_date in ['y', 'n']:
+                break
+            print("Invalid choice. Please enter 'y', 'n', '0', or 'exit'")
+        
         if use_custom_date == 'y':
             while True:
                 try:
-                    custom_date = input("Enter date (DD.MM.YYYY): ")
+                    custom_date = input("Enter date (DD.MM.YYYY) or 0/exit to cancel: ")
+                    if custom_date.lower() in ['0', 'exit']:
+                        return
                     # Validate date format
                     datetime.strptime(custom_date, "%d.%m.%Y")
                     current_time = f"{custom_date} {datetime.now().strftime('%H:%M:%S')}"
                     break
                 except ValueError:
                     print("Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)")
+        
         else:
             current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         
         ticket = input("Enter your log here: ")
+        if ticket.lower() in ['0', 'exit']:
+            return
+            
         hours = input("Enter hours (e.g., 1h 30m or just 30m): ")
+        if hours.lower() in ['0', 'exit']:
+            return
         
         self.current_log = {
             "timestamp": current_time,
@@ -219,7 +234,7 @@ class BLogger:
         print(self.term.move_y(0) + self.term.black_on_white + "Edit Log" + self.term.normal)
         self.display_logs()
         try:
-            log_index = int(input("\nEnter log number to edit (0 to cancel): ")) - 1
+            log_index = int(input("\nEnter log number to edit (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -246,7 +261,7 @@ class BLogger:
         print(self.term.clear)
         self.display_logs()
         try:
-            log_index = int(input("Enter log number to delete (0 to cancel): ")) - 1
+            log_index = int(input("Enter log number to delete (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -317,13 +332,15 @@ class BLogger:
         
         # Ask which status to update
         while True:
-            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both): ").lower()
+            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+            if status_choice == '0':
+                return
             if status_choice in ['q', 'j', 'b']:
                 break
-            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, or 'b' for Both.")
+            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
         
         try:
-            log_index = int(input("\nEnter log number to mark as checked (0 to cancel): ")) - 1
+            log_index = int(input("\nEnter log number to mark as checked (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -363,13 +380,15 @@ class BLogger:
         
         # Ask which status to update
         while True:
-            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both): ").lower()
+            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+            if status_choice == '0':
+                return
             if status_choice in ['q', 'j', 'b']:
                 break
-            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, or 'b' for Both.")
+            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
         
         try:
-            log_index = int(input("\nEnter log number to mark as unchecked (0 to cancel): ")) - 1
+            log_index = int(input("\nEnter log number to mark as unchecked (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -407,7 +426,7 @@ class BLogger:
         print(self.term.move_y(0) + self.term.black_on_white + "Edit Subtasks" + self.term.normal)
         self.display_logs()
         try:
-            log_index = int(input("\nEnter log number to edit subtasks (0 to cancel): ")) - 1
+            log_index = int(input("\nEnter log number to edit subtasks (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -423,7 +442,9 @@ class BLogger:
                     print(f"{i}. {subtask}")
                 
                 while True:
-                    subtask_input = input("\nEnter subtask number to edit (press Enter to finish): ").strip()
+                    subtask_input = input("\nEnter subtask number to edit (0 to exit): ").strip()
+                    if subtask_input == '0':  # If user enters 0
+                        break
                     if not subtask_input:  # If user just presses Enter
                         break
                     
