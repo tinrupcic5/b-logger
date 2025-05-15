@@ -287,6 +287,7 @@ class BLogger:
         """Display help information"""
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "B-LOGGER Help" + self.term.normal)
+        
         print("\n" + self.term.underline + "Main Features:" + self.term.normal)
         print("1. Create and manage work logs with timestamps")
         print("2. Track hours worked on different tasks")
@@ -295,6 +296,14 @@ class BLogger:
         print("5. View and edit existing logs")
         print("6. Calculate total hours worked per day")
         print("7. Support for custom dates")
+        print("8. Sprint-based log organization")
+        print("9. Customizable log types and sprint settings")
+        
+        print("\n" + self.term.underline + "Settings:" + self.term.normal)
+        print("You can customize:")
+        print("- Log Types: Add, edit, or remove different types of logs")
+        print("- Sprint Configuration: Set sprint start date and duration")
+        print("Access settings from the main menu (option 10)")
         
         print("\n" + self.term.underline + "How to Input Hours:" + self.term.normal)
         print("You can input hours in several formats:")
@@ -320,10 +329,26 @@ class BLogger:
         print("Format: DD.MM.YYYY")
         print("Example: 28.04.2024")
         
+        print("\n" + self.term.underline + "Sprint Features:" + self.term.normal)
+        print("- View current sprint logs")
+        print("- View sprint history")
+        print("- Automatic sprint date calculation")
+        print("- Distinct ticket tracking")
+        print("- Sprint duration and start date configuration")
+        
         print("\n" + self.term.underline + "Keyboard Navigation:" + self.term.normal)
         print("- Use arrow keys to navigate through input history")
         print("- Use backspace to delete characters")
         print("- Press Enter to confirm inputs")
+        print("- Press 0 or type 'exit' to return to previous menu")
+        print("- Press Ctrl+C to exit the program")
+        
+        print("\n" + self.term.underline + "Tips:" + self.term.normal)
+        print("- Use settings to customize log types and sprint configuration")
+        print("- Add subtasks to better organize your work")
+        print("- Mark tasks as checked/unchecked to track progress")
+        print("- View sprint history to see past work")
+        print("- Use custom dates for historical entries")
         
         input("\nPress Enter to return to main menu...")
 
@@ -664,11 +689,17 @@ class BLogger:
         
         input("\nPress Enter to continue...")
 
-    def get_sprint_dates(self, sprint_number):
-        """Get start and end dates for a specific sprint number (0 is current sprint, -1 is previous, etc.)"""
+    def get_sprint_dates(self, sprint_number=None):
+        """Get start and end dates for a specific sprint number or current sprint"""
         # Get sprint configuration from settings
         first_sprint_start = datetime.strptime(self.settings["sprint_config"]["start_date"], "%Y-%m-%d")
         sprint_duration = self.settings["sprint_config"]["duration_weeks"] * 7  # Convert weeks to days
+        
+        if sprint_number is None:
+            # Calculate current sprint based on current date
+            now = datetime.now()
+            days_since_first_sprint = (now - first_sprint_start).days
+            sprint_number = days_since_first_sprint // sprint_duration
         
         # Calculate sprint dates based on sprint number
         sprint_start = first_sprint_start + timedelta(days=sprint_duration * sprint_number)
@@ -736,7 +767,8 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Current Sprint Logs" + self.term.normal)
         
-        sprint_start, sprint_end = self.get_sprint_dates(0)
+        # Get current sprint dates (pass None to get current sprint)
+        sprint_start, sprint_end = self.get_sprint_dates(None)
         print(f"\nSprint Period: {sprint_start.strftime('%d.%m.%Y')} - {sprint_end.strftime('%d.%m.%Y')}")
         print("-" * 72)
         
@@ -783,7 +815,7 @@ class BLogger:
                 print(f"\n  {self.term.yellow(current_date)}")
             print(f"    {self.term.cyan(log['ticket'])}")
         
-            input("\nPress Enter to continue...")
+        input("\nPress Enter to continue...")
 
     def run(self):
         self.reset_screen()
