@@ -16,6 +16,8 @@ class BLogger:
         self.current_log = None
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
         self.log_file = os.path.join(self.script_dir, "logs.json")
+        self.settings_file = os.path.join(self.script_dir, "settings.json")
+        self.load_settings()
         self.load_logs()
         self.banner = None
         self.load_banner()
@@ -470,14 +472,207 @@ class BLogger:
             print("Invalid input")
             input("\nPress Enter to continue...")
 
+    def load_settings(self):
+        """Load settings from file or create default settings"""
+        default_settings = {
+            "log_types": [
+                {"name": "Q", "prefix": "QI-", "status": "❌"},
+                {"name": "Jira", "prefix": "JIRA-", "status": "❌"}
+            ],
+            "sprint_config": {
+                "start_date": "2025-04-30",
+                "duration_weeks": 2
+            }
+        }
+        
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    self.settings = json.load(f)
+            except json.JSONDecodeError:
+                print("Error loading settings. Using default settings.")
+                self.settings = default_settings
+        else:
+            self.settings = default_settings
+            self.save_settings()
+
+    def save_settings(self):
+        """Save current settings to file"""
+        with open(self.settings_file, 'w') as f:
+            json.dump(self.settings, f, indent=2)
+
+    def manage_settings(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Settings" + self.term.normal)
+        
+        while True:
+            print("\n1. Manage Log Types")
+            print("2. Configure Sprint Settings")
+            print("3. View Current Settings")
+            print("4. Return to Main Menu")
+            
+            try:
+                choice = input("\nEnter your choice (1-4): ")
+                
+                if choice == "1":
+                    self.manage_log_types()
+                elif choice == "2":
+                    self.configure_sprint_settings()
+                elif choice == "3":
+                    self.view_settings()
+                elif choice == "4":
+                    break
+                else:
+                    print("Invalid choice. Please enter a number between 1 and 4.")
+            except KeyboardInterrupt:
+                break
+
+    def manage_log_types(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Manage Log Types" + self.term.normal)
+        
+        while True:
+            print("\nCurrent Log Types:")
+            for i, log_type in enumerate(self.settings["log_types"], 1):
+                print(f"{i}. {log_type['name']} (Prefix: {log_type['prefix']})")
+            
+            print("\n1. Add New Log Type")
+            print("2. Edit Existing Log Type")
+            print("3. Delete Log Type")
+            print("4. Return to Settings")
+            
+            try:
+                choice = input("\nEnter your choice (1-4): ")
+                
+                if choice == "1":
+                    name = input("Enter log type name: ")
+                    prefix = input("Enter log type prefix: ")
+                    self.settings["log_types"].append({
+                        "name": name,
+                        "prefix": prefix,
+                        "status": "❌"
+                    })
+                    self.save_settings()
+                    print("Log type added successfully!")
+                
+                elif choice == "2":
+                    if not self.settings["log_types"]:
+                        print("No log types to edit.")
+                        continue
+                    
+                    index = int(input("Enter log type number to edit: ")) - 1
+                    if 0 <= index < len(self.settings["log_types"]):
+                        log_type = self.settings["log_types"][index]
+                        name = input(f"Enter new name [{log_type['name']}]: ") or log_type['name']
+                        prefix = input(f"Enter new prefix [{log_type['prefix']}]: ") or log_type['prefix']
+                        self.settings["log_types"][index] = {
+                            "name": name,
+                            "prefix": prefix,
+                            "status": log_type["status"]
+                        }
+                        self.save_settings()
+                        print("Log type updated successfully!")
+                    else:
+                        print("Invalid log type number.")
+                
+                elif choice == "3":
+                    if not self.settings["log_types"]:
+                        print("No log types to delete.")
+                        continue
+                    
+                    index = int(input("Enter log type number to delete: ")) - 1
+                    if 0 <= index < len(self.settings["log_types"]):
+                        del self.settings["log_types"][index]
+                        self.save_settings()
+                        print("Log type deleted successfully!")
+                    else:
+                        print("Invalid log type number.")
+                
+                elif choice == "4":
+                    break
+                
+                else:
+                    print("Invalid choice. Please enter a number between 1 and 4.")
+            
+            except (ValueError, IndexError):
+                print("Invalid input. Please enter a valid number.")
+            except KeyboardInterrupt:
+                break
+
+    def configure_sprint_settings(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Configure Sprint Settings" + self.term.normal)
+        
+        while True:
+            print("\nCurrent Sprint Settings:")
+            print(f"Start Date: {self.settings['sprint_config']['start_date']}")
+            print(f"Duration: {self.settings['sprint_config']['duration_weeks']} weeks")
+            
+            print("\n1. Change Sprint Start Date")
+            print("2. Change Sprint Duration")
+            print("3. Return to Settings")
+            
+            try:
+                choice = input("\nEnter your choice (1-3): ")
+                
+                if choice == "1":
+                    while True:
+                        new_date = input("Enter new start date (YYYY-MM-DD): ")
+                        try:
+                            datetime.strptime(new_date, "%Y-%m-%d")
+                            self.settings["sprint_config"]["start_date"] = new_date
+                            self.save_settings()
+                            print("Sprint start date updated successfully!")
+                            break
+                        except ValueError:
+                            print("Invalid date format. Please use YYYY-MM-DD.")
+                
+                elif choice == "2":
+                    while True:
+                        try:
+                            new_duration = int(input("Enter new sprint duration in weeks: "))
+                            if new_duration > 0:
+                                self.settings["sprint_config"]["duration_weeks"] = new_duration
+                                self.save_settings()
+                                print("Sprint duration updated successfully!")
+                                break
+                            else:
+                                print("Duration must be greater than 0.")
+                        except ValueError:
+                            print("Please enter a valid number.")
+                
+                elif choice == "3":
+                    break
+                
+                else:
+                    print("Invalid choice. Please enter a number between 1 and 3.")
+            
+            except KeyboardInterrupt:
+                break
+
+    def view_settings(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Current Settings" + self.term.normal)
+        
+        print("\nLog Types:")
+        for log_type in self.settings["log_types"]:
+            print(f"- {log_type['name']} (Prefix: {log_type['prefix']})")
+        
+        print("\nSprint Configuration:")
+        print(f"Start Date: {self.settings['sprint_config']['start_date']}")
+        print(f"Duration: {self.settings['sprint_config']['duration_weeks']} weeks")
+        
+        input("\nPress Enter to continue...")
+
     def get_sprint_dates(self, sprint_number):
         """Get start and end dates for a specific sprint number (0 is current sprint, -1 is previous, etc.)"""
-        # Define the first sprint start date
-        first_sprint_start = datetime(2025, 4, 30)
+        # Get sprint configuration from settings
+        first_sprint_start = datetime.strptime(self.settings["sprint_config"]["start_date"], "%Y-%m-%d")
+        sprint_duration = self.settings["sprint_config"]["duration_weeks"] * 7  # Convert weeks to days
         
         # Calculate sprint dates based on sprint number
-        sprint_start = first_sprint_start + timedelta(days=14 * sprint_number)
-        sprint_end = sprint_start + timedelta(days=13)  # Sprint ends 13 days after start
+        sprint_start = first_sprint_start + timedelta(days=sprint_duration * sprint_number)
+        sprint_end = sprint_start + timedelta(days=sprint_duration - 1)  # Sprint ends one day before next sprint
         
         return sprint_start, sprint_end
 
@@ -603,11 +798,12 @@ class BLogger:
             print("7. Edit subtasks")
             print("8. View current sprint")
             print("9. View sprint history")
-            print("10. Help")
-            print("11. Exit")
+            print("10. Settings")
+            print("11. Help")
+            print("12. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-11): ")
+                choice = input("\nEnter your choice (1-12): ")
                 if choice == "1":
                     self.create_new_log()
                     self.reset_screen()
@@ -637,9 +833,12 @@ class BLogger:
                     self.view_sprint_history()
                     self.reset_screen()
                 elif choice == "10":
-                    self.display_help()
+                    self.manage_settings()
                     self.reset_screen()
                 elif choice == "11":
+                    self.display_help()
+                    self.reset_screen()
+                elif choice == "12":
                     self.running = False
                     break
             except KeyboardInterrupt:

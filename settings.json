@@ -1,0 +1,18 @@
+{
+  "log_types": [
+    {
+      "name": "Q",
+      "prefix": "QI-",
+      "status": "\u274c"
+    },
+    {
+      "name": "Jira",
+      "prefix": "JIRA-",
+      "status": "\u274c"
+    }
+  ],
+  "sprint_config": {
+    "start_date": "2025-04-30",
+    "duration_weeks": 2
+  }
+}
