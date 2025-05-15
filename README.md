@@ -1,35 +1,61 @@
-# B-LOGGER
+# ☕ B-Logger ☕
 
-A terminal-based logging application to track work tasks and hours.
+A retro-style command-line tool for logging your work hours and tasks. Perfect for keeping track of your daily activities with a touch of nostalgia.
 
 ## Features
 
-- Create and manage work logs with timestamps
-- Track hours worked on different tasks
-- Mark tasks as completed in Q and Jira
-- Add subtasks to main tasks
-- View and edit existing logs
-- Calculate total hours worked per day
-- Support for custom dates
-- Sprint-based log organization
-  - View current sprint logs
-  - View sprint history
-  - Automatic sprint date calculation (every other Wednesday)
-  - Distinct QI ticket tracking
+- 📝 Create and manage work logs with timestamps
+- ⏱️ Track hours worked on different tasks
+- ✅ Mark tasks as completed in 1 and 2
+- 📋 Add subtasks to main tasks
+- 📊 View and edit existing logs
+- 🧮 Calculate total hours worked per day
+- 📅 Support for custom dates
+- ⚙️ Customizable log types and sprint settings
 
-## Sprint Features
+## Installation
 
-- Sprints are 14 days long, ending every other Wednesday
-- Current sprint view shows:
-  - Distinct QI tickets (without duplicates)
-  - All logs organized by date
-- Sprint history shows:
-  - All past sprints
-  - Current sprint
-  - Future sprints with logs
-  - Logs organized by date within each sprint
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/b-logger.git
+cd b-logger
+```
 
-## How to Input Hours
+2. Install the required Python packages:
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the script:
+```bash
+python b_logger.py
+```
+
+## Usage
+
+### Main Menu Options
+
+1. Create new log
+2. View logs
+3. Edit log
+4. Delete log
+5. Mark as checked
+6. Mark as unchecked
+7. Edit subtasks
+8. View current sprint
+9. View sprint history
+10. Settings
+11. Help
+12. Exit
+
+### Settings
+
+The tool allows you to customize:
+
+- Log Types: Add, edit, or remove different types of logs (e.g., 1, 2, etc.)
+- Sprint Configuration: Set sprint start date and duration
+
+### How to Input Hours
 
 You can input hours in several formats:
 - `1h`        - One hour
@@ -37,39 +63,47 @@ You can input hours in several formats:
 - `1h 30m`    - One hour and thirty minutes
 - `ongoing`   - For tasks still in progress
 
-## Status Indicators
+### Examples
+
+```
+2h        # 2 hours
+45m       # 45 minutes
+1h 15m    # 1 hour and 15 minutes
+2h 30m    # 2 hours and 30 minutes
+ongoing   # Task in progress (not counted in totals)
+```
+
+### Status Indicators
 
 - ✅ - Task is completed
 - ❌ - Task is not completed
-- Status can be set for both Q and Jira separately
 
-## Custom Dates
+Status can be set for both 1 and 2 separately.
+
+### Custom Dates
 
 When creating a new log, you can use a custom date:
 - Format: DD.MM.YYYY
 - Example: 28.04.2024
 
-## Keyboard Navigation
+### Keyboard Navigation
 
 - Use arrow keys to navigate through input history
 - Use backspace to delete characters
 - Press Enter to confirm inputs
-
-## Installation
-
-1. Clone the repository
-2. Install required packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the application:
-```bash
-python b_logger.py
-```
+- Press 0 or type 'exit' to return to previous menu
 
 ## Requirements
 
-- Python 3.x
+- Python 3.6 or higher
 - Required packages (see requirements.txt):
   - blessed
   - python-dateutil
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contributing
+
+Feel free to submit issues and enhancement requests!
