@@ -291,17 +291,21 @@ class BLogger:
         print("\n" + self.term.underline + "Main Features:" + self.term.normal)
         print("1. Create and manage work logs with timestamps")
         print("2. Track hours worked on different tasks")
-        print("3. Mark tasks as completed in 1 and 2")
+        print("3. Mark tasks as completed in multiple systems")
         print("4. Add subtasks to main tasks")
         print("5. View and edit existing logs")
-        print("6. Calculate total hours worked per day")
+        print("6. Calculate total hours worked per workday")
         print("7. Support for custom dates")
         print("8. Sprint-based log organization")
         print("9. Customizable log types and sprint settings")
+        print("10. Workday-based statistics and reporting")
         
         print("\n" + self.term.underline + "Settings:" + self.term.normal)
         print("You can customize:")
         print("- Log Types: Add, edit, or remove different types of logs")
+        print("  Each log type can track its own completion status")
+        print("  Example: Q, Jira, GitHub, etc.")
+        print("  Custom prefixes for each type")
         print("- Sprint Configuration: Set sprint start date and duration")
         print("Access settings from the main menu (option 10)")
         
@@ -322,7 +326,16 @@ class BLogger:
         print("\n" + self.term.underline + "Status Indicators:" + self.term.normal)
         print("✅ - Task is completed")
         print("❌ - Task is not completed")
-        print("Status can be set for both 1 and 2 separately")
+        print("Each log type can have its own completion status")
+        print("Example: A task can be completed in Q but not in Jira")
+        
+        print("\n" + self.term.underline + "Statistics:" + self.term.normal)
+        print("- Shows data for the last 10 workdays")
+        print("- Excludes weekends automatically")
+        print("- Displays completion status for each log type")
+        print("- Shows hours worked per workday")
+        print("- Lists incomplete tasks by type")
+        print("- Visual charts for hours and logs per day")
         
         print("\n" + self.term.underline + "Custom Dates:" + self.term.normal)
         print("When creating a new log, you can use a custom date")
@@ -349,6 +362,7 @@ class BLogger:
         print("- Mark tasks as checked/unchecked to track progress")
         print("- View sprint history to see past work")
         print("- Use custom dates for historical entries")
+        print("- Check statistics to monitor your work patterns")
         
         input("\nPress Enter to return to main menu...")
 
@@ -818,7 +832,7 @@ class BLogger:
         input("\nPress Enter to continue...")
 
     def display_statistics(self):
-        """Display statistics and charts for logs in the last 10 days"""
+        """Display statistics and charts for logs in the last 10 workdays"""
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Statistics and Charts" + self.term.normal)
         
@@ -827,26 +841,49 @@ class BLogger:
             input("\nPress Enter to continue...")
             return
         
-        # Get current date and calculate date 10 days ago
+        # Get current date and calculate date 14 days ago (to ensure we get 10 workdays)
         current_date = datetime.now()
-        ten_days_ago = current_date - timedelta(days=9)  # Changed to 9 to include today and 9 previous days
+        fourteen_days_ago = current_date - timedelta(days=13)
         
-        # Filter logs from last 10 days
+        # First, get all logs from the last 14 days
         recent_logs = []
         for log in self.logs:
             log_date = datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y")
-            if log_date >= ten_days_ago:
+            if log_date >= fourteen_days_ago:
                 recent_logs.append(log)
         
         if not recent_logs:
-            print("\nNo logs found in the last 10 days.")
+            print("\nNo logs found in the last 10 workdays.")
             input("\nPress Enter to continue...")
             return
         
+        # Get unique workdays from the logs
+        workdays = set()
+        for log in recent_logs:
+            log_date = datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y")
+            if log_date.weekday() < 5:  # 0-4 are weekdays
+                workdays.add(log_date.strftime("%d.%m.%Y"))
+        
+        # Sort workdays and take the last 10
+        workdays = sorted(list(workdays), key=lambda x: datetime.strptime(x, "%d.%m.%Y"), reverse=True)[:10]
+        
+        # Filter logs to only include those from the last 10 workdays
+        recent_logs = [log for log in recent_logs if log['timestamp'].split()[0] in workdays]
+        
         # Calculate statistics
         total_logs = len(recent_logs)
-        completed_q = sum(1 for log in recent_logs if log['q_status'] == "✅")
-        completed_jira = sum(1 for log in recent_logs if log['jira_status'] == "✅")
+        
+        # Calculate completion status for each log type
+        completion_stats = {}
+        for log_type in self.settings["log_types"]:
+            type_name = log_type["name"]
+            status_field = f"{type_name.lower()}_status"
+            completed = sum(1 for log in recent_logs if log.get(status_field, "❌") == "✅")
+            completion_stats[type_name] = {
+                "completed": completed,
+                "total": total_logs,
+                "percentage": (completed/total_logs*100) if total_logs > 0 else 0
+            }
         
         # Calculate hours per day
         hours_per_day = {}
@@ -857,25 +894,30 @@ class BLogger:
             hours_per_day[date] += self.parse_hours(log['hours'])
         
         # Display statistics
-        print("\n" + self.term.underline + "Summary Statistics:" + self.term.normal)
+        print("\n" + self.term.underline + "Summary Statistics (Last 10 Workdays):" + self.term.normal)
         print(f"Total Logs: {total_logs}")
-        print(f"Completed Q Logs: {completed_q} ({completed_q/total_logs*100:.1f}%)")
-        print(f"Completed Jira Logs: {completed_jira} ({completed_jira/total_logs*100:.1f}%)")
+        for type_name, stats in completion_stats.items():
+            print(f"Completed {type_name} Logs: {stats['completed']} ({stats['percentage']:.1f}%)")
+        
+        # Display incomplete logs for each type
+        for log_type in self.settings["log_types"]:
+            type_name = log_type["name"]
+            status_field = f"{type_name.lower()}_status"
+            print(f"\n" + self.term.underline + f"Incomplete {type_name} Logs:" + self.term.normal)
+            incomplete_logs = [log for log in recent_logs if log.get(status_field, "❌") == "❌"]
+            if incomplete_logs:
+                for log in sorted(incomplete_logs, key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y")):
+                    print(f"{log['timestamp'].split()[0]}: {log['ticket']}")
+            else:
+                print(f"No incomplete {type_name} logs found.")
         
         # Display hours chart
-        print("\n" + self.term.underline + "Hours per Day (Last 10 Days):" + self.term.normal)
+        print("\n" + self.term.underline + "Hours per Workday:" + self.term.normal)
         max_hours = max(hours_per_day.values()) if hours_per_day else 0
         chart_width = 50  # Maximum width of the chart
         
-        # Get all dates in the last 10 days, including today
-        all_dates = []
-        current = current_date
-        for _ in range(10):
-            all_dates.append(current.strftime("%d.%m.%Y"))
-            current -= timedelta(days=1)
-        
-        # Display hours for each day, including days with no logs
-        for date in all_dates:
+        # Display hours for each workday
+        for date in workdays:
             hours = hours_per_day.get(date, 0)
             bar_length = int((hours / max_hours) * chart_width) if max_hours > 0 else 0
             bar = "█" * bar_length
@@ -886,8 +928,8 @@ class BLogger:
             else:
                 print(f"{date}: {bar} {hours_str}")
         
-        # Display logs per day chart
-        print("\n" + self.term.underline + "Logs per Day (Last 10 Days):" + self.term.normal)
+        # Display logs per workday chart
+        print("\n" + self.term.underline + "Logs per Workday:" + self.term.normal)
         logs_by_date = {}
         for log in recent_logs:
             date = log['timestamp'].split()[0]
@@ -897,8 +939,8 @@ class BLogger:
         
         max_logs = max(logs_by_date.values()) if logs_by_date else 0
         
-        # Display logs for each day, including days with no logs
-        for date in all_dates:
+        # Display logs for each workday
+        for date in workdays:
             num_logs = logs_by_date.get(date, 0)
             bar_length = int((num_logs / max_logs) * chart_width) if max_logs > 0 else 0
             bar = "█" * bar_length

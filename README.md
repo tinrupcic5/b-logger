@@ -6,12 +6,14 @@ A retro-style command-line tool for logging your work hours and tasks. Perfect f
 
 - 📝 Create and manage work logs with timestamps
 - ⏱️ Track hours worked on different tasks
-- ✅ Mark tasks as completed in 1 and 2
+- ✅ Mark tasks as completed in multiple systems (Q, Jira, etc.)
 - 📋 Add subtasks to main tasks
 - 📊 View and edit existing logs
-- 🧮 Calculate total hours worked per day
+- 🧮 Calculate total hours worked per workday
 - 📅 Support for custom dates
 - ⚙️ Customizable log types and sprint settings
+- 📈 Workday-based statistics and reporting
+- 🎯 Sprint-based log organization
 
 ## Installation
 
@@ -22,9 +24,9 @@ cd b-logger
 ```
 
 2. Install the required Python packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 3. Run the script:
 ```bash
@@ -46,13 +48,17 @@ python b_logger.py
 9. View sprint history
 10. Settings
 11. Help
-12. Exit
+12. Statistics
+13. Exit
 
 ### Settings
 
 The tool allows you to customize:
 
-- Log Types: Add, edit, or remove different types of logs (e.g., 1, 2, etc.)
+- Log Types: Add, edit, or remove different types of logs
+  - Each log type can track its own completion status
+  - Example: Q, Jira, GitHub, etc.
+  - Custom prefixes for each type
 - Sprint Configuration: Set sprint start date and duration
 
 ### How to Input Hours
@@ -78,7 +84,16 @@ ongoing   # Task in progress (not counted in totals)
 - ✅ - Task is completed
 - ❌ - Task is not completed
 
-Status can be set for both 1 and 2 separately.
+Each log type can have its own completion status. For example, a task can be completed in Q but not in Jira.
+
+### Statistics
+
+The statistics feature provides:
+- Data for the last 10 workdays (excluding weekends)
+- Completion status for each log type
+- Hours worked per workday
+- Incomplete tasks by type
+- Visual charts for hours and logs per day
 
 ### Custom Dates
 
@@ -86,12 +101,21 @@ When creating a new log, you can use a custom date:
 - Format: DD.MM.YYYY
 - Example: 28.04.2024
 
+### Sprint Features
+
+- View current sprint logs
+- View sprint history
+- Automatic sprint date calculation
+- Distinct ticket tracking
+- Sprint duration and start date configuration
+
 ### Keyboard Navigation
 
 - Use arrow keys to navigate through input history
 - Use backspace to delete characters
 - Press Enter to confirm inputs
 - Press 0 or type 'exit' to return to previous menu
+- Press Ctrl+C to exit the program
 
 ## Requirements
 
