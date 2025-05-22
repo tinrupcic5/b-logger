@@ -95,7 +95,7 @@ class BLogger:
         ticket = input("Enter your log here: ")
         if ticket.lower() in ['0', 'exit']:
             return
-            
+        
         hours = input("Enter hours (e.g., 1h 30m or just 30m): ")
         if hours.lower() in ['0', 'exit']:
             return
@@ -817,6 +817,100 @@ class BLogger:
         
         input("\nPress Enter to continue...")
 
+    def display_statistics(self):
+        """Display statistics and charts for logs in the last 10 days"""
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Statistics and Charts" + self.term.normal)
+        
+        if not self.logs:
+            print("\nNo logs found.")
+            input("\nPress Enter to continue...")
+            return
+        
+        # Get current date and calculate date 10 days ago
+        current_date = datetime.now()
+        ten_days_ago = current_date - timedelta(days=9)  # Changed to 9 to include today and 9 previous days
+        
+        # Filter logs from last 10 days
+        recent_logs = []
+        for log in self.logs:
+            log_date = datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y")
+            if log_date >= ten_days_ago:
+                recent_logs.append(log)
+        
+        if not recent_logs:
+            print("\nNo logs found in the last 10 days.")
+            input("\nPress Enter to continue...")
+            return
+        
+        # Calculate statistics
+        total_logs = len(recent_logs)
+        completed_q = sum(1 for log in recent_logs if log['q_status'] == "✅")
+        completed_jira = sum(1 for log in recent_logs if log['jira_status'] == "✅")
+        
+        # Calculate hours per day
+        hours_per_day = {}
+        for log in recent_logs:
+            date = log['timestamp'].split()[0]
+            if date not in hours_per_day:
+                hours_per_day[date] = 0
+            hours_per_day[date] += self.parse_hours(log['hours'])
+        
+        # Display statistics
+        print("\n" + self.term.underline + "Summary Statistics:" + self.term.normal)
+        print(f"Total Logs: {total_logs}")
+        print(f"Completed Q Logs: {completed_q} ({completed_q/total_logs*100:.1f}%)")
+        print(f"Completed Jira Logs: {completed_jira} ({completed_jira/total_logs*100:.1f}%)")
+        
+        # Display hours chart
+        print("\n" + self.term.underline + "Hours per Day (Last 10 Days):" + self.term.normal)
+        max_hours = max(hours_per_day.values()) if hours_per_day else 0
+        chart_width = 50  # Maximum width of the chart
+        
+        # Get all dates in the last 10 days, including today
+        all_dates = []
+        current = current_date
+        for _ in range(10):
+            all_dates.append(current.strftime("%d.%m.%Y"))
+            current -= timedelta(days=1)
+        
+        # Display hours for each day, including days with no logs
+        for date in all_dates:
+            hours = hours_per_day.get(date, 0)
+            bar_length = int((hours / max_hours) * chart_width) if max_hours > 0 else 0
+            bar = "█" * bar_length
+            hours_str = self.format_hours(hours)
+            # Add a star (*) to indicate today's date
+            if date == current_date.strftime("%d.%m.%Y"):
+                print(f"{date}*: {bar} {hours_str}")
+            else:
+                print(f"{date}: {bar} {hours_str}")
+        
+        # Display logs per day chart
+        print("\n" + self.term.underline + "Logs per Day (Last 10 Days):" + self.term.normal)
+        logs_by_date = {}
+        for log in recent_logs:
+            date = log['timestamp'].split()[0]
+            if date not in logs_by_date:
+                logs_by_date[date] = 0
+            logs_by_date[date] += 1
+        
+        max_logs = max(logs_by_date.values()) if logs_by_date else 0
+        
+        # Display logs for each day, including days with no logs
+        for date in all_dates:
+            num_logs = logs_by_date.get(date, 0)
+            bar_length = int((num_logs / max_logs) * chart_width) if max_logs > 0 else 0
+            bar = "█" * bar_length
+            # Add a star (*) to indicate today's date
+            if date == current_date.strftime("%d.%m.%Y"):
+                print(f"{date}*: {bar} {num_logs} logs")
+            else:
+                print(f"{date}: {bar} {num_logs} logs")
+        
+        print("\n* Today's date")
+        input("\nPress Enter to continue...")
+
     def run(self):
         self.reset_screen()
         while self.running:
@@ -832,10 +926,11 @@ class BLogger:
             print("9. View sprint history")
             print("10. Settings")
             print("11. Help")
-            print("12. Exit")
+            print("12. Statistics")
+            print("13. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-12): ")
+                choice = input("\nEnter your choice (1-13): ")
                 if choice == "1":
                     self.create_new_log()
                     self.reset_screen()
@@ -871,6 +966,9 @@ class BLogger:
                     self.display_help()
                     self.reset_screen()
                 elif choice == "12":
+                    self.display_statistics()
+                    self.reset_screen()
+                elif choice == "13":
                     self.running = False
                     break
             except KeyboardInterrupt:

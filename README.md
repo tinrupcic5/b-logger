@@ -22,9 +22,9 @@ cd b-logger
 ```
 
 2. Install the required Python packages:
-```bash
-pip install -r requirements.txt
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 3. Run the script:
 ```bash
