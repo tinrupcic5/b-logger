@@ -60,7 +60,14 @@ class BLogger:
     def save_logs(self):
         # Sort logs by date before saving (oldest first)
         self.logs.sort(key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
+        
+        # Save to main logs file
         with open(self.log_file, 'w') as f:
+            json.dump(self.logs, f, indent=2)
+            
+        # Save to backup file
+        backup_file = os.path.join(self.script_dir, "backup", "logs_backup.json")
+        with open(backup_file, 'w') as f:
             json.dump(self.logs, f, indent=2)
 
     def create_new_log(self):
