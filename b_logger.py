@@ -1065,74 +1065,222 @@ class BLogger:
         
         input("\nPress Enter to continue...")
 
+    def edit_migration_script(self):
+        """Edit an existing migration script"""
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Edit Migration Script" + self.term.normal)
+        
+        if not self.scripts:
+            print("\nNo migration scripts found.")
+            input("\nPress Enter to continue...")
+            return
+        
+        print("\nMigration Scripts:")
+        print("-" * 72)
+        for i, script in enumerate(self.scripts, 1):
+            print(f"\n{i}. Ticket: {script['ticket']}")
+            print(f"   Timestamp: {script['timestamp']}")
+            print(f"   Script: {script['script']}")
+            print(f"   Demo: {script.get('demo_status', '❌')}")
+            print(f"   Stage: {script.get('stage_status', '❌')}")
+            print(f"   Release Notes: {script.get('release_status', '❌')}")
+            print("-" * 72)
+        
+        try:
+            script_index = int(input("\nEnter script number to edit (0 to exit): ")) - 1
+            if script_index == -1:
+                return
+            
+            if 0 <= script_index < len(self.scripts):
+                script = self.scripts[script_index]
+                
+                # Edit ticket
+                print(f"\nCurrent ticket: {script['ticket']}")
+                new_ticket = input("Enter new ticket (press Enter to keep current): ").strip()
+                if new_ticket:
+                    script['ticket'] = new_ticket
+                
+                # Edit script
+                print(f"\nCurrent script: {script['script']}")
+                new_script = input("Enter new script (press Enter to keep current): ").strip()
+                if new_script:
+                    script['script'] = new_script
+                
+                # Edit Demo status
+                print(f"\nCurrent Demo status: {script.get('demo_status', '❌')}")
+                while True:
+                    demo_status = input("Update Demo status (x for ❌, c for ✅, Enter to keep current): ").lower()
+                    if not demo_status:
+                        break
+                    if demo_status in ['x', 'c']:
+                        script['demo_status'] = "✅" if demo_status == "c" else "❌"
+                        break
+                    print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
+                
+                # Edit Stage status
+                print(f"\nCurrent Stage status: {script.get('stage_status', '❌')}")
+                while True:
+                    stage_status = input("Update Stage status (x for ❌, c for ✅, Enter to keep current): ").lower()
+                    if not stage_status:
+                        break
+                    if stage_status in ['x', 'c']:
+                        script['stage_status'] = "✅" if stage_status == "c" else "❌"
+                        break
+                    print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
+                
+                # Edit Release notes status
+                print(f"\nCurrent Release notes status: {script.get('release_status', '❌')}")
+                while True:
+                    release_status = input("Update Release notes status (x for ❌, c for ✅, Enter to keep current): ").lower()
+                    if not release_status:
+                        break
+                    if release_status in ['x', 'c']:
+                        script['release_status'] = "✅" if release_status == "c" else "❌"
+                        break
+                    print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
+                
+                self.scripts[script_index] = script
+                self.save_scripts()
+                print("\nMigration script updated successfully!")
+                input("\nPress Enter to continue...")
+        except ValueError:
+            print("Invalid input")
+            input("\nPress Enter to continue...")
+
+    def delete_migration_script(self):
+        """Delete a migration script"""
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Delete Migration Script" + self.term.normal)
+        
+        if not self.scripts:
+            print("\nNo migration scripts found.")
+            input("\nPress Enter to continue...")
+            return
+        
+        print("\nMigration Scripts:")
+        print("-" * 72)
+        for i, script in enumerate(self.scripts, 1):
+            print(f"\n{i}. Ticket: {script['ticket']}")
+            print(f"   Timestamp: {script['timestamp']}")
+            print(f"   Script: {script['script']}")
+            print(f"   Demo: {script.get('demo_status', '❌')}")
+            print(f"   Stage: {script.get('stage_status', '❌')}")
+            print(f"   Release Notes: {script.get('release_status', '❌')}")
+            print("-" * 72)
+        
+        try:
+            script_index = int(input("\nEnter script number to delete (0 to exit): ")) - 1
+            if script_index == -1:
+                return
+            
+            if 0 <= script_index < len(self.scripts):
+                confirm = input(f"Are you sure you want to delete script {script_index + 1}? (y/n): ").lower()
+                if confirm == 'y':
+                    deleted_script = self.scripts.pop(script_index)
+                    print(f"Deleted script: {deleted_script['ticket']}")
+                    self.save_scripts()
+                    input("\nPress Enter to continue...")
+        except ValueError:
+            print("Invalid input")
+            input("\nPress Enter to continue...")
+
     def run(self):
         self.reset_screen()
         while self.running:
             print(self.term.black_on_white + "B-Logger" + self.term.normal)
-            print("\n1. Create new log")
-            print("2. View logs")
-            print("3. Edit log")
-            print("4. Delete log")
-            print("5. Mark as checked")
-            print("6. Mark as unchecked")
-            print("7. Edit subtasks")
-            print("8. View current sprint")
-            print("9. View sprint history")
-            print("10. Settings")
-            print("11. Help")
-            print("12. Statistics")
-            print("13. Log migration script")
-            print("14. View migration scripts")
-            print("15. Exit")
+            print("\n1. Logs")
+            print("2. View current sprint")
+            print("3. View sprint history")
+            print("4. Migration script")
+            print("5. Settings")
+            print("6. Help")
+            print("7. Statistics")
+            print("8. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-15): ")
-                if choice == "1":
-                    self.create_new_log()
-                    self.reset_screen()
+                choice = input("\nEnter your choice (1-8): ")
+                
+                if choice == "1":  # Logs submenu
+                    while True:
+                        print(self.term.clear)
+                        print(self.term.black_on_white + "Logs Menu" + self.term.normal)
+                        print("\n1. Create log")
+                        print("2. View logs")
+                        print("3. Edit log")
+                        print("4. Delete log")
+                        print("5. Mark as checked")
+                        print("6. Mark as unchecked")
+                        print("7. Edit subtasks")
+                        print("0. Back to main menu")
+                        
+                        subchoice = input("\nEnter your choice (0-7): ")
+                        if subchoice == "0":
+                            break
+                        elif subchoice == "1":
+                            self.create_new_log()
+                        elif subchoice == "2":
+                            self.display_logs()
+                            input("\nPress Enter to continue...")
+                        elif subchoice == "3":
+                            self.edit_log()
+                        elif subchoice == "4":
+                            self.delete_log()
+                        elif subchoice == "5":
+                            self.mark_as_checked()
+                        elif subchoice == "6":
+                            self.mark_as_unchecked()
+                        elif subchoice == "7":
+                            self.edit_subtasks()
+                        self.reset_screen()
+                
                 elif choice == "2":
-                    self.display_logs()
-                    input("\nPress Enter to continue...")
-                    self.reset_screen()
-                elif choice == "3":
-                    self.edit_log()
-                    self.reset_screen()
-                elif choice == "4":
-                    self.delete_log()
-                    self.reset_screen()
-                elif choice == "5":
-                    self.mark_as_checked()
-                    self.reset_screen()
-                elif choice == "6":
-                    self.mark_as_unchecked()
-                    self.reset_screen()
-                elif choice == "7":
-                    self.edit_subtasks()
-                    self.reset_screen()
-                elif choice == "8":
                     self.view_sprint_logs()
                     self.reset_screen()
-                elif choice == "9":
+                
+                elif choice == "3":
                     self.view_sprint_history()
                     self.reset_screen()
-                elif choice == "10":
+                
+                elif choice == "4":  # Migration script submenu
+                    while True:
+                        print(self.term.clear)
+                        print(self.term.black_on_white + "Migration Script Menu" + self.term.normal)
+                        print("\n1. Create migration script")
+                        print("2. View migration scripts")
+                        print("3. Edit migration script")
+                        print("4. Delete migration script")
+                        print("0. Back to main menu")
+                        
+                        subchoice = input("\nEnter your choice (0-4): ")
+                        if subchoice == "0":
+                            break
+                        elif subchoice == "1":
+                            self.log_migration_script()
+                        elif subchoice == "2":
+                            self.view_migration_scripts()
+                        elif subchoice == "3":
+                            self.edit_migration_script()
+                        elif subchoice == "4":
+                            self.delete_migration_script()
+                        self.reset_screen()
+                
+                elif choice == "5":
                     self.manage_settings()
                     self.reset_screen()
-                elif choice == "11":
+                
+                elif choice == "6":
                     self.display_help()
                     self.reset_screen()
-                elif choice == "12":
+                
+                elif choice == "7":
                     self.display_statistics()
                     self.reset_screen()
-                elif choice == "13":
-                    self.log_migration_script()
-                    self.reset_screen()
-                elif choice == "14":
-                    self.view_migration_scripts()
-                    self.reset_screen()
-                elif choice == "15":
+                
+                elif choice == "8":
                     self.running = False
                     break
+                
+                self.reset_screen()
             except KeyboardInterrupt:
                 print("\nExiting B-LOGGER...")
                 self.running = False
