@@ -14,6 +14,7 @@ A retro-style command-line tool for logging your work hours and tasks. Perfect f
 - ⚙️ Customizable log types and sprint settings
 - 📈 Workday-based statistics and reporting
 - 🎯 Sprint-based log organization
+- 🔄 Migration script management
 
 ## Installation
 
@@ -35,21 +36,35 @@ python b_logger.py
 
 ## Usage
 
-### Main Menu Options
+### Main Menu
 
-1. Create new log
+1. Logs
+2. View current sprint
+3. View sprint history
+4. Migration script
+5. Settings
+6. Help
+7. Statistics
+8. Exit
+
+### Logs Menu
+
+1. Create log
 2. View logs
 3. Edit log
 4. Delete log
 5. Mark as checked
 6. Mark as unchecked
-7. Edit subtasks (delete subtask)
-8. View current sprint
-9. View sprint history
-10. Settings
-11. Help
-12. Statistics
-13. Exit
+7. Edit subtasks
+0. Back to main menu
+
+### Migration Script Menu
+
+1. Create migration script
+2. View migration scripts
+3. Edit migration script
+4. Delete migration script
+0. Back to main menu
 
 ### Settings
 
@@ -85,6 +100,18 @@ ongoing   # Task in progress (not counted in totals)
 - ❌ - Task is not completed
 
 Each log type can have its own completion status. For example, a task can be completed in Q but not in Jira.
+
+### Migration Scripts
+
+Migration scripts can be managed with the following features:
+- Create new migration scripts with ticket number and SQL script
+- Track status for:
+  - Demo (✅/❌)
+  - Stage (✅/❌)
+  - Release notes (✅/❌)
+- View all migration scripts
+- Edit existing scripts
+- Delete scripts
 
 ### Statistics
 
