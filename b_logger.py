@@ -1189,13 +1189,21 @@ class BLogger:
 
     def load_links(self):
         try:
-            with open('links.json', 'r') as f:
+            links_file = os.path.join(self.script_dir, "links.json")
+            with open(links_file, 'r') as f:
                 return json.load(f)
         except FileNotFoundError:
             return {"links": []}
 
     def save_links(self):
-        with open('links.json', 'w') as f:
+        # Save to main links file
+        links_file = os.path.join(self.script_dir, "links.json")
+        with open(links_file, 'w') as f:
+            json.dump(self.links, f, indent=4)
+            
+        # Save to backup file
+        backup_file = os.path.join(self.script_dir, "backup", "links_backup.json")
+        with open(backup_file, 'w') as f:
             json.dump(self.links, f, indent=4)
 
     def add_link(self):
@@ -1231,11 +1239,14 @@ class BLogger:
             input("\nPress Enter to continue...")
             return
         
+        print("\nLinks:")
+        print("-" * 72)
         for i, link in enumerate(self.links["links"], 1):
-            print(f"\n{i}. {link['link']}")
-            print(f"   Timestamp: {link['timestamp']}")
+            print(f"{i}. created: {link['timestamp']}")
+            print(f"   link: @{link['link']}")
             if link['comments']:
                 print(f"   Comments: {link['comments']}")
+            print("-" * 72)
         
         input("\nPress Enter to continue...")
 
