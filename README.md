@@ -15,6 +15,7 @@ A retro-style command-line tool for logging your work hours and tasks. Perfect f
 - 📈 Workday-based statistics and reporting
 - 🎯 Sprint-based log organization
 - 🔄 Migration script management
+- 🔗 Important links management
 
 ## Installation
 
@@ -42,10 +43,11 @@ python b_logger.py
 2. View current sprint
 3. View sprint history
 4. Migration script
-5. Settings
-6. Help
-7. Statistics
-8. Exit
+5. Important Links
+6. Settings
+7. Help
+8. Statistics
+9. Exit
 
 ### Logs Menu
 
@@ -64,6 +66,14 @@ python b_logger.py
 2. View migration scripts
 3. Edit migration script
 4. Delete migration script
+0. Back to main menu
+
+### Important Links Menu
+
+1. Add link
+2. View links
+3. Edit link
+4. Delete link
 0. Back to main menu
 
 ### Settings
@@ -112,6 +122,20 @@ Migration scripts can be managed with the following features:
 - View all migration scripts
 - Edit existing scripts
 - Delete scripts
+
+### Important Links
+
+The Important Links feature allows you to:
+- Store frequently used links (Slack, web links, etc.)
+- Add comments to each link
+- Track when links were added or modified
+- View all stored links
+- Edit existing links
+- Delete links
+- Each link entry includes:
+  - Timestamp
+  - Link URL
+  - Optional comments
 
 ### Statistics
 

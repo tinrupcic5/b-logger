@@ -18,12 +18,15 @@ class BLogger:
         self.log_file = os.path.join(self.script_dir, "logs.json")
         self.settings_file = os.path.join(self.script_dir, "settings.json")
         self.scripts_file = os.path.join(self.script_dir, "scripts.json")
+        self.running = True
         self.load_settings()
         self.load_logs()
         self.load_scripts()
         self.banner = None
         self.load_banner()
-        self.running = True
+        self.links = self.load_links()
+        self.input_history = []
+        self.history_index = 0
         
         # Set up signal handler for Ctrl+C
         signal.signal(signal.SIGINT, self.handle_exit)
@@ -1184,6 +1187,129 @@ class BLogger:
             print("Invalid input")
             input("\nPress Enter to continue...")
 
+    def load_links(self):
+        try:
+            with open('links.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {"links": []}
+
+    def save_links(self):
+        with open('links.json', 'w') as f:
+            json.dump(self.links, f, indent=4)
+
+    def add_link(self):
+        print(self.term.clear)
+        print(self.term.black_on_white + "Add Important Link" + self.term.normal)
+        
+        link = input("\nEnter the link: ").strip()
+        if not link:
+            print("Link cannot be empty!")
+            input("\nPress Enter to continue...")
+            return
+        
+        comments = input("Enter comments (optional): ").strip()
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        self.links["links"].append({
+            "timestamp": timestamp,
+            "link": link,
+            "comments": comments
+        })
+        
+        self.save_links()
+        print("\nLink added successfully!")
+        input("\nPress Enter to continue...")
+
+    def view_links(self):
+        print(self.term.clear)
+        print(self.term.black_on_white + "Important Links" + self.term.normal)
+        
+        if not self.links["links"]:
+            print("\nNo links found!")
+            input("\nPress Enter to continue...")
+            return
+        
+        for i, link in enumerate(self.links["links"], 1):
+            print(f"\n{i}. {link['link']}")
+            print(f"   Timestamp: {link['timestamp']}")
+            if link['comments']:
+                print(f"   Comments: {link['comments']}")
+        
+        input("\nPress Enter to continue...")
+
+    def edit_link(self):
+        print(self.term.clear)
+        print(self.term.black_on_white + "Edit Important Link" + self.term.normal)
+        
+        if not self.links["links"]:
+            print("\nNo links found!")
+            input("\nPress Enter to continue...")
+            return
+        
+        for i, link in enumerate(self.links["links"], 1):
+            print(f"\n{i}. {link['link']}")
+            print(f"   Timestamp: {link['timestamp']}")
+            if link['comments']:
+                print(f"   Comments: {link['comments']}")
+        
+        try:
+            choice = int(input("\nEnter the number of the link to edit (0 to cancel): "))
+            if choice == 0:
+                return
+            if 1 <= choice <= len(self.links["links"]):
+                link = self.links["links"][choice - 1]
+                print(f"\nCurrent link: {link['link']}")
+                new_link = input("Enter new link (press Enter to keep current): ").strip()
+                if new_link:
+                    link['link'] = new_link
+                
+                print(f"\nCurrent comments: {link['comments']}")
+                new_comments = input("Enter new comments (press Enter to keep current): ").strip()
+                if new_comments:
+                    link['comments'] = new_comments
+                
+                link['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.save_links()
+                print("\nLink updated successfully!")
+            else:
+                print("\nInvalid choice!")
+        except ValueError:
+            print("\nPlease enter a valid number!")
+        
+        input("\nPress Enter to continue...")
+
+    def delete_link(self):
+        print(self.term.clear)
+        print(self.term.black_on_white + "Delete Important Link" + self.term.normal)
+        
+        if not self.links["links"]:
+            print("\nNo links found!")
+            input("\nPress Enter to continue...")
+            return
+        
+        for i, link in enumerate(self.links["links"], 1):
+            print(f"\n{i}. {link['link']}")
+            print(f"   Timestamp: {link['timestamp']}")
+            if link['comments']:
+                print(f"   Comments: {link['comments']}")
+        
+        try:
+            choice = int(input("\nEnter the number of the link to delete (0 to cancel): "))
+            if choice == 0:
+                return
+            if 1 <= choice <= len(self.links["links"]):
+                deleted_link = self.links["links"].pop(choice - 1)
+                self.save_links()
+                print(f"\nLink deleted: {deleted_link['link']}")
+            else:
+                print("\nInvalid choice!")
+        except ValueError:
+            print("\nPlease enter a valid number!")
+        
+        input("\nPress Enter to continue...")
+
     def run(self):
         self.reset_screen()
         while self.running:
@@ -1192,13 +1318,14 @@ class BLogger:
             print("2. View current sprint")
             print("3. View sprint history")
             print("4. Migration script")
-            print("5. Settings")
-            print("6. Help")
-            print("7. Statistics")
-            print("8. Exit")
+            print("5. Important Links")
+            print("6. Settings")
+            print("7. Help")
+            print("8. Statistics")
+            print("9. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-8): ")
+                choice = input("\nEnter your choice (1-9): ")
                 
                 if choice == "1":  # Logs submenu
                     while True:
@@ -1264,19 +1391,42 @@ class BLogger:
                             self.delete_migration_script()
                         self.reset_screen()
                 
-                elif choice == "5":
+                elif choice == "5":  # Important Links submenu
+                    while True:
+                        print(self.term.clear)
+                        print(self.term.black_on_white + "Important Links Menu" + self.term.normal)
+                        print("\n1. Add link")
+                        print("2. View links")
+                        print("3. Edit link")
+                        print("4. Delete link")
+                        print("0. Back to main menu")
+                        
+                        subchoice = input("\nEnter your choice (0-4): ")
+                        if subchoice == "0":
+                            break
+                        elif subchoice == "1":
+                            self.add_link()
+                        elif subchoice == "2":
+                            self.view_links()
+                        elif subchoice == "3":
+                            self.edit_link()
+                        elif subchoice == "4":
+                            self.delete_link()
+                        self.reset_screen()
+                
+                elif choice == "6":
                     self.manage_settings()
                     self.reset_screen()
                 
-                elif choice == "6":
+                elif choice == "7":
                     self.display_help()
                     self.reset_screen()
                 
-                elif choice == "7":
+                elif choice == "8":
                     self.display_statistics()
                     self.reset_screen()
                 
-                elif choice == "8":
+                elif choice == "9":
                     self.running = False
                     break
                 
