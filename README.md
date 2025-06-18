@@ -6,7 +6,7 @@ A retro-style command-line tool for logging your work hours and tasks. Perfect f
 
 - 📝 Create and manage work logs with timestamps
 - ⏱️ Track hours worked on different tasks
-- ✅ Mark tasks as completed in multiple systems (Q, Jira, etc.)
+- ✅ Mark tasks as completed in multiple systems (other, Jira, etc.)
 - 📋 Add subtasks to main tasks
 - 📊 View and edit existing logs
 - 🧮 Calculate total hours worked per workday
@@ -82,7 +82,7 @@ The tool allows you to customize:
 
 - Log Types: Add, edit, or remove different types of logs
   - Each log type can track its own completion status
-  - Example: Q, Jira, GitHub, etc.
+  - Example: other, Jira, GitHub, etc.
   - Custom prefixes for each type
 - Sprint Configuration: Set sprint start date and duration
 
@@ -109,7 +109,7 @@ ongoing   # Task in progress (not counted in totals)
 - ✅ - Task is completed
 - ❌ - Task is not completed
 
-Each log type can have its own completion status. For example, a task can be completed in Q but not in Jira.
+Each log type can have its own completion status. For example, a task can be completed in other but not in Jira.
 
 ### Migration Scripts
 
