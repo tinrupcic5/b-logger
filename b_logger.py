@@ -1321,6 +1321,38 @@ class BLogger:
         
         input("\nPress Enter to continue...")
 
+    def view_logs_for_date(self):
+        print(self.term.clear)
+        print(self.term.black_on_white + "View Logs for a Date" + self.term.normal)
+        date_str = input("\nEnter date (DD.MM.YYYY): ").strip()
+        try:
+            datetime.strptime(date_str, "%d.%m.%Y")
+        except ValueError:
+            print("Invalid date format. Please use DD.MM.YYYY.")
+            input("\nPress Enter to continue...")
+            return
+        found = False
+        output_lines = []
+        for log in self.logs:
+            log_date = log['timestamp'].split()[0]
+            if log_date == date_str:
+                if not found:
+                    output_lines.append(date_str)
+                    found = True
+                # Main log line
+                ticket_line = log['ticket']
+                if log['hours']:
+                    ticket_line += f" ({log['hours']})"
+                output_lines.append(ticket_line)
+                # Subtasks
+                for sub in log.get('subtasks', []):
+                    output_lines.append(f"   └─ {sub}")
+        if not found:
+            print(f"\nNo logs found for {date_str}.")
+        else:
+            print("\n" + "\n".join(output_lines))
+        input("\nPress Enter to continue...")
+
     def run(self):
         self.reset_screen()
         while self.running:
@@ -1349,9 +1381,10 @@ class BLogger:
                         print("5. Mark as checked")
                         print("6. Mark as unchecked")
                         print("7. Edit subtasks")
+                        print("8. View logs for a date")
                         print("0. Back to main menu")
                         
-                        subchoice = input("\nEnter your choice (0-7): ")
+                        subchoice = input("\nEnter your choice (0-8): ")
                         if subchoice == "0":
                             break
                         elif subchoice == "1":
@@ -1369,6 +1402,8 @@ class BLogger:
                             self.mark_as_unchecked()
                         elif subchoice == "7":
                             self.edit_subtasks()
+                        elif subchoice == "8":
+                            self.view_logs_for_date()
                         self.reset_screen()
                 
                 elif choice == "2":
