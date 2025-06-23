@@ -1004,8 +1004,23 @@ class BLogger:
         if not ticket or ticket.lower() in ['0', 'exit']:
             return
         
-        script = input("Enter migration script: ")
-        if script.lower() in ['0', 'exit']:
+        print("\nEnter migration script (press Enter twice to finish):")
+        print("(You can enter multiple lines with spaces and newlines)")
+        script_lines = []
+        while True:
+            line = input()
+            if line.lower() in ['0', 'exit']:
+                return
+            if line == "" and script_lines and script_lines[-1] == "":
+                # Two consecutive empty lines means end of input
+                script_lines.pop()  # Remove the last empty line
+                break
+            script_lines.append(line)
+        
+        script = '\n'.join(script_lines)
+        if not script.strip():
+            print("Script cannot be empty!")
+            input("\nPress Enter to continue...")
             return
         
         # Get status for Demo
@@ -1060,7 +1075,11 @@ class BLogger:
         for i, script in enumerate(self.scripts, 1):
             print(f"\n{i}. Ticket: {script['ticket']}")
             print(f"   Timestamp: {script['timestamp']}")
-            print(f"   Script: {script['script']}")
+            print(f"   Script:")
+            # Display script with proper indentation
+            script_lines = script['script'].split('\n')
+            for line in script_lines:
+                print(f"      {line}")
             print(f"   Demo: {script.get('demo_status', '❌')}")
             print(f"   Stage: {script.get('stage_status', '❌')}")
             print(f"   Release Notes: {script.get('release_status', '❌')}")
@@ -1083,7 +1102,10 @@ class BLogger:
         for i, script in enumerate(self.scripts, 1):
             print(f"\n{i}. Ticket: {script['ticket']}")
             print(f"   Timestamp: {script['timestamp']}")
-            print(f"   Script: {script['script']}")
+            print(f"   Script:")
+            script_lines = script['script'].split('\n')
+            for line in script_lines:
+                print(f"      {line}")
             print(f"   Demo: {script.get('demo_status', '❌')}")
             print(f"   Stage: {script.get('stage_status', '❌')}")
             print(f"   Release Notes: {script.get('release_status', '❌')}")
@@ -1104,10 +1126,30 @@ class BLogger:
                     script['ticket'] = new_ticket
                 
                 # Edit script
-                print(f"\nCurrent script: {script['script']}")
-                new_script = input("Enter new script (press Enter to keep current): ").strip()
-                if new_script:
-                    script['script'] = new_script
+                print(f"\nCurrent script:")
+                script_lines = script['script'].split('\n')
+                for line in script_lines:
+                    print(f"      {line}")
+                print("\nEnter new script (press Enter twice to finish, or just Enter to keep current):")
+                print("(You can enter multiple lines with spaces and newlines)")
+                new_script_lines = []
+                while True:
+                    line = input()
+                    if line == "" and new_script_lines and new_script_lines[-1] == "":
+                        # Two consecutive empty lines means end of input
+                        new_script_lines.pop()  # Remove the last empty line
+                        break
+                    if line == "" and not new_script_lines:
+                        # Empty input means keep current
+                        break
+                    new_script_lines.append(line)
+                
+                if new_script_lines:
+                    new_script = '\n'.join(new_script_lines)
+                    if new_script.strip():
+                        script['script'] = new_script
+                    else:
+                        print("Script cannot be empty, keeping current script.")
                 
                 # Edit Demo status
                 print(f"\nCurrent Demo status: {script.get('demo_status', '❌')}")
@@ -1165,7 +1207,11 @@ class BLogger:
         for i, script in enumerate(self.scripts, 1):
             print(f"\n{i}. Ticket: {script['ticket']}")
             print(f"   Timestamp: {script['timestamp']}")
-            print(f"   Script: {script['script']}")
+            print(f"   Script:")
+            # Display script with proper indentation
+            script_lines = script['script'].split('\n')
+            for line in script_lines:
+                print(f"      {line}")
             print(f"   Demo: {script.get('demo_status', '❌')}")
             print(f"   Stage: {script.get('stage_status', '❌')}")
             print(f"   Release Notes: {script.get('release_status', '❌')}")
