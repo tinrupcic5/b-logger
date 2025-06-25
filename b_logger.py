@@ -4,7 +4,6 @@ import os
 import sys
 import json
 import signal
-import readline
 from datetime import datetime, timedelta
 from blessed import Terminal
 from dateutil import parser
@@ -30,12 +29,6 @@ class BLogger:
         
         # Set up signal handler for Ctrl+C
         signal.signal(signal.SIGINT, self.handle_exit)
-        
-        # Configure readline for better input handling
-        readline.parse_and_bind('bind ^[[D backward-char')
-        readline.parse_and_bind('bind ^[[C forward-char')
-        readline.parse_and_bind('bind ^[[A previous-history')
-        readline.parse_and_bind('bind ^[[B next-history')
 
     def handle_exit(self, signum, frame):
         """Handle clean exit on Ctrl+C"""

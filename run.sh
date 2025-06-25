@@ -24,10 +24,27 @@ if [ -z "$VIRTUAL_ENV" ]; then
     exit 1
 fi
 
-# Install dependencies
-echo "Installing dependencies..."
-"$SCRIPT_DIR/venv/bin/python3" -m pip install --upgrade pip
-"$SCRIPT_DIR/venv/bin/python3" -m pip install -r "$SCRIPT_DIR/requirements.txt"
+# Check if dependencies are already installed
+if [ ! -f "$SCRIPT_DIR/venv/lib/python*/site-packages/blessed" ]; then
+    echo "Installing dependencies..."
+    "$SCRIPT_DIR/venv/bin/python3" -m pip install --upgrade pip > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to upgrade pip"
+        "$SCRIPT_DIR/venv/bin/python3" -m pip install --upgrade pip
+        exit 1
+    fi
+    
+    "$SCRIPT_DIR/venv/bin/python3" -m pip install -r "$SCRIPT_DIR/requirements.txt" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to install dependencies"
+        "$SCRIPT_DIR/venv/bin/python3" -m pip install -r "$SCRIPT_DIR/requirements.txt"
+        exit 1
+    fi
+    
+    echo "Dependencies installed successfully! 🍺"
+else
+    echo "Enjoy the app 🍺"
+fi
 
 # Run the application using the virtual environment's Python
 "$SCRIPT_DIR/venv/bin/python3" "$SCRIPT_DIR/b_logger.py"
