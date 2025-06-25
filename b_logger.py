@@ -1399,22 +1399,167 @@ class BLogger:
             print("\n" + "\n".join(output_lines))
         input("\nPress Enter to continue...")
 
+    def list_available_sprints(self):
+        """List all available sprints with their dates and let user choose"""
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Available Sprints" + self.term.normal)
+        
+        if not self.logs:
+            print("\nNo logs found.")
+            input("\nPress Enter to continue...")
+            return None
+            
+        # Find the earliest and latest log dates
+        log_dates = [datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y") for log in self.logs]
+        earliest_date = min(log_dates)
+        latest_date = max(log_dates)
+        
+        # Calculate sprint numbers
+        first_sprint_start = datetime.strptime(self.settings["sprint_config"]["start_date"], "%Y-%m-%d")
+        sprint_duration = self.settings["sprint_config"]["duration_weeks"] * 7
+        
+        days_since_first_sprint = (earliest_date - first_sprint_start).days
+        sprints_back = abs(days_since_first_sprint // sprint_duration)
+        
+        days_since_first_sprint = (latest_date - first_sprint_start).days
+        sprints_forward = days_since_first_sprint // sprint_duration
+        
+        # Show sprints from earliest to latest
+        available_sprints = []
+        for i in range(-sprints_back, sprints_forward + 1):
+            sprint_start, sprint_end = self.get_sprint_dates(i)
+            
+            # Filter logs within sprint period
+            sprint_logs = []
+            for log in self.logs:
+                log_date = datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y")
+                if sprint_start <= log_date <= sprint_end:
+                    sprint_logs.append(log)
+            
+            # Show sprint if it has logs or is in the past
+            if sprint_logs or sprint_end < datetime.now():
+                available_sprints.append({
+                    'sprint_number': i,
+                    'start_date': sprint_start,
+                    'end_date': sprint_end,
+                    'logs_count': len(sprint_logs)
+                })
+        
+        if not available_sprints:
+            print("\nNo sprints found.")
+            input("\nPress Enter to continue...")
+            return None
+        
+        # Display sprints with numbers
+        print("\nAvailable Sprints:")
+        print("-" * 50)
+        for i, sprint in enumerate(available_sprints, 1):
+            sprint_num = sprint['sprint_number']
+            start_date = sprint['start_date'].strftime('%d.%m.%Y')
+            end_date = sprint['end_date'].strftime('%d.%m.%Y')
+            logs_count = sprint['logs_count']
+            
+            # Mark current sprint
+            current_marker = ""
+            if sprint_num == self.get_current_sprint_number():
+                current_marker = " (Current)"
+            
+            print(f"{i}. Sprint {sprint_num}: {start_date} - {end_date} ({logs_count} logs){current_marker}")
+        
+        # Let user choose
+        try:
+            choice = int(input(f"\nEnter sprint number (1-{len(available_sprints)}) or 0 to cancel: "))
+            if choice == 0:
+                return None
+            if 1 <= choice <= len(available_sprints):
+                return available_sprints[choice - 1]['sprint_number']
+            else:
+                print("\nInvalid choice!")
+                input("\nPress Enter to continue...")
+                return None
+        except ValueError:
+            print("\nPlease enter a valid number!")
+            input("\nPress Enter to continue...")
+            return None
+
+    def get_current_sprint_number(self):
+        """Get the current sprint number"""
+        now = datetime.now()
+        first_sprint_start = datetime.strptime(self.settings["sprint_config"]["start_date"], "%Y-%m-%d")
+        sprint_duration = self.settings["sprint_config"]["duration_weeks"] * 7
+        days_since_first_sprint = (now - first_sprint_start).days
+        return days_since_first_sprint // sprint_duration
+
+    def view_specific_sprint(self, sprint_number):
+        """View logs for a specific sprint number"""
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + f"Sprint {sprint_number} Logs" + self.term.normal)
+        
+        # Get sprint dates
+        sprint_start, sprint_end = self.get_sprint_dates(sprint_number)
+        print(f"\nSprint Period: {sprint_start.strftime('%d.%m.%Y')} - {sprint_end.strftime('%d.%m.%Y')}")
+        print("-" * 72)
+        
+        # Filter logs within sprint period
+        sprint_logs = []
+        for log in self.logs:
+            log_date = datetime.strptime(log['timestamp'].split()[0], "%d.%m.%Y")
+            if sprint_start <= log_date <= sprint_end:
+                sprint_logs.append(log)
+        
+        if not sprint_logs:
+            print("\nNo logs found for this sprint.")
+            input("\nPress Enter to continue...")
+            return
+        
+        # Get distinct QI- logs
+        qi_logs = {}  # Use dict to store unique QI numbers
+        for log in sprint_logs:
+            if log['ticket'].startswith('QI-'):
+                # Extract QI number (everything before the first space or [)
+                qi_number = log['ticket'].split()[0].split('[')[0]
+                # Keep the version with [Q] if it exists, otherwise keep the first one
+                if '[Q]' in log['ticket'] or qi_number not in qi_logs:
+                    qi_logs[qi_number] = log['ticket']
+        
+        # Display QI logs first
+        if qi_logs:
+            print("\nQI Tickets:")
+            for qi_log in sorted(qi_logs.values()):
+                print(f"  {self.term.cyan(qi_log)}")
+            print("-" * 72)
+        
+        # Display all logs sorted by date
+        print("\nOther Logs:")
+        # Sort logs by date
+        sprint_logs.sort(key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
+        
+        # Group logs by date
+        current_date = None
+        for log in sprint_logs:
+            log_date = log['timestamp'].split()[0]
+            if current_date != log_date:
+                current_date = log_date
+                print(f"\n  {self.term.yellow(current_date)}")
+            print(f"    {self.term.cyan(log['ticket'])}")
+        
+        input("\nPress Enter to continue...")
+
     def run(self):
         self.reset_screen()
         while self.running:
             print(self.term.black_on_white + "B-Logger" + self.term.normal)
             print("\n1. Logs")
-            print("2. View current sprint")
-            print("3. View sprint history")
-            print("4. Migration script")
-            print("5. Important Links")
-            print("6. Settings")
-            print("7. Help")
-            print("8. Statistics")
-            print("9. Exit")
+            print("2. Sprint")
+            print("3. Migration script")
+            print("4. Important Links")
+            print("5. Settings")
+            print("6. Help")
+            print("7. Statistics")
+            print("8. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-9): ")
+                choice = input("\nEnter your choice (1-8): ")
                 
                 if choice == "1":  # Logs submenu
                     while True:
@@ -1452,15 +1597,29 @@ class BLogger:
                             self.view_logs_for_date()
                         self.reset_screen()
                 
-                elif choice == "2":
-                    self.view_sprint_logs()
-                    self.reset_screen()
+                elif choice == "2":  # Sprint submenu
+                    while True:
+                        print(self.term.clear)
+                        print(self.term.black_on_white + "Sprint Menu" + self.term.normal)
+                        print("\n1. View current sprint")
+                        print("2. View sprint by date")
+                        print("3. View sprint history")
+                        print("0. Back to main menu")
+                        
+                        subchoice = input("\nEnter your choice (0-3): ")
+                        if subchoice == "0":
+                            break
+                        elif subchoice == "1":
+                            self.view_sprint_logs()
+                        elif subchoice == "2":
+                            selected_sprint = self.list_available_sprints()
+                            if selected_sprint is not None:
+                                self.view_specific_sprint(selected_sprint)
+                        elif subchoice == "3":
+                            self.view_sprint_history()
+                        self.reset_screen()
                 
-                elif choice == "3":
-                    self.view_sprint_history()
-                    self.reset_screen()
-                
-                elif choice == "4":  # Migration script submenu
+                elif choice == "3":  # Migration script submenu
                     while True:
                         print(self.term.clear)
                         print(self.term.black_on_white + "Migration Script Menu" + self.term.normal)
@@ -1483,7 +1642,7 @@ class BLogger:
                             self.delete_migration_script()
                         self.reset_screen()
                 
-                elif choice == "5":  # Important Links submenu
+                elif choice == "4":  # Important Links submenu
                     while True:
                         print(self.term.clear)
                         print(self.term.black_on_white + "Important Links Menu" + self.term.normal)
@@ -1506,19 +1665,19 @@ class BLogger:
                             self.delete_link()
                         self.reset_screen()
                 
-                elif choice == "6":
+                elif choice == "5":
                     self.manage_settings()
                     self.reset_screen()
                 
-                elif choice == "7":
+                elif choice == "6":
                     self.display_help()
                     self.reset_screen()
                 
-                elif choice == "8":
+                elif choice == "7":
                     self.display_statistics()
                     self.reset_screen()
                 
-                elif choice == "9":
+                elif choice == "8":
                     self.running = False
                     break
                 
