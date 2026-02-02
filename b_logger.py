@@ -467,6 +467,94 @@ class BLogger:
             print("Invalid input")
             input("\nPress Enter to continue...")
 
+    def mark_all_day_as_checked(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Checked" + self.term.normal)
+
+        while True:
+            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+            if status_choice == '0':
+                return
+            if status_choice in ['q', 'j', 'b']:
+                break
+            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+
+        print("\nLast 5 days:")
+        for i in range(5):
+            d = datetime.now() - timedelta(days=i)
+            print(f"  {d.strftime('%d.%m.%Y')}")
+        date_str = input("\nEnter date (DD.MM.YYYY): ").strip()
+        try:
+            datetime.strptime(date_str, "%d.%m.%Y")
+        except ValueError:
+            print("Invalid date format. Please use DD.MM.YYYY.")
+            input("\nPress Enter to continue...")
+            return
+
+        count = 0
+        for log in self.logs:
+            log_date = log['timestamp'].split()[0]
+            if log_date == date_str:
+                if status_choice in ['q', 'b']:
+                    log["q_status"] = "✅"
+                if status_choice in ['j', 'b']:
+                    log["jira_status"] = "✅"
+                count += 1
+
+        status_updated = []
+        if status_choice in ['q', 'b']:
+            status_updated.append("Q")
+        if status_choice in ['j', 'b']:
+            status_updated.append("Jira")
+        print(f"\nMarked {count} log(s) as checked for {date_str} ({', '.join(status_updated)}).")
+        if count > 0:
+            self.save_logs()
+        input("\nPress Enter to continue...")
+
+    def mark_all_day_as_unchecked(self):
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Unchecked" + self.term.normal)
+
+        while True:
+            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+            if status_choice == '0':
+                return
+            if status_choice in ['q', 'j', 'b']:
+                break
+            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+
+        print("\nLast 5 days:")
+        for i in range(5):
+            d = datetime.now() - timedelta(days=i)
+            print(f"  {d.strftime('%d.%m.%Y')}")
+        date_str = input("\nEnter date (DD.MM.YYYY): ").strip()
+        try:
+            datetime.strptime(date_str, "%d.%m.%Y")
+        except ValueError:
+            print("Invalid date format. Please use DD.MM.YYYY.")
+            input("\nPress Enter to continue...")
+            return
+
+        count = 0
+        for log in self.logs:
+            log_date = log['timestamp'].split()[0]
+            if log_date == date_str:
+                if status_choice in ['q', 'b']:
+                    log["q_status"] = "❌"
+                if status_choice in ['j', 'b']:
+                    log["jira_status"] = "❌"
+                count += 1
+
+        status_updated = []
+        if status_choice in ['q', 'b']:
+            status_updated.append("Q")
+        if status_choice in ['j', 'b']:
+            status_updated.append("Jira")
+        print(f"\nMarked {count} log(s) as unchecked for {date_str} ({', '.join(status_updated)}).")
+        if count > 0:
+            self.save_logs()
+        input("\nPress Enter to continue...")
+
     def edit_subtasks(self):
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Edit Subtasks" + self.term.normal)
@@ -1566,9 +1654,11 @@ class BLogger:
                         print("6. Mark as unchecked")
                         print("7. Edit subtasks")
                         print("8. View logs for a date")
+                        print("9. Mark all day as checked")
+                        print("10. Mark all day as unchecked")
                         print("0. Back to main menu")
                         
-                        subchoice = input("\nEnter your choice (0-8): ")
+                        subchoice = input("\nEnter your choice (0-10): ")
                         if subchoice == "0":
                             break
                         elif subchoice == "1":
@@ -1588,6 +1678,10 @@ class BLogger:
                             self.edit_subtasks()
                         elif subchoice == "8":
                             self.view_logs_for_date()
+                        elif subchoice == "9":
+                            self.mark_all_day_as_checked()
+                        elif subchoice == "10":
+                            self.mark_all_day_as_unchecked()
                         self.reset_screen()
                 
                 elif choice == "2":  # Sprint submenu
