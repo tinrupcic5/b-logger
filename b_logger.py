@@ -468,92 +468,116 @@ class BLogger:
             input("\nPress Enter to continue...")
 
     def mark_all_day_as_checked(self):
-        print(self.term.clear)
-        print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Checked" + self.term.normal)
-
         while True:
-            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
-            if status_choice == '0':
-                return
-            if status_choice in ['q', 'j', 'b']:
-                break
-            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+            print(self.term.clear)
+            print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Checked" + self.term.normal)
 
-        print("\nLast 5 days:")
-        for i in range(5):
-            d = datetime.now() - timedelta(days=i)
-            print(f"  {d.strftime('%d.%m.%Y')}")
-        date_str = input("\nEnter date (DD.MM.YYYY): ").strip()
-        try:
-            datetime.strptime(date_str, "%d.%m.%Y")
-        except ValueError:
-            print("Invalid date format. Please use DD.MM.YYYY.")
-            input("\nPress Enter to continue...")
-            return
+            while True:
+                status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+                if status_choice == '0':
+                    return
+                if status_choice in ['q', 'j', 'b']:
+                    break
+                print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
 
-        count = 0
-        for log in self.logs:
-            log_date = log['timestamp'].split()[0]
-            if log_date == date_str:
-                if status_choice in ['q', 'b']:
-                    log["q_status"] = "✅"
-                if status_choice in ['j', 'b']:
-                    log["jira_status"] = "✅"
-                count += 1
+            last_5_days = [(datetime.now() - timedelta(days=i)).strftime('%d.%m.%Y') for i in range(5)]
+            print("\nLast 5 days:")
+            for idx, d in enumerate(last_5_days, 1):
+                print(f"  {idx}. {d}")
+            date_input = input("\nEnter date (1-5 or DD.MM.YYYY): ").strip()
+            if date_input in ['1', '2', '3', '4', '5']:
+                date_str = last_5_days[int(date_input) - 1]
+            else:
+                date_str = date_input
+            try:
+                datetime.strptime(date_str, "%d.%m.%Y")
+            except ValueError:
+                print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
+                input("\nPress Enter to continue...")
+                continue
 
-        status_updated = []
-        if status_choice in ['q', 'b']:
-            status_updated.append("Q")
-        if status_choice in ['j', 'b']:
-            status_updated.append("Jira")
-        print(f"\nMarked {count} log(s) as checked for {date_str} ({', '.join(status_updated)}).")
-        if count > 0:
-            self.save_logs()
-        input("\nPress Enter to continue...")
+            count = 0
+            for log in self.logs:
+                log_date = log['timestamp'].split()[0]
+                if log_date == date_str:
+                    if status_choice in ['q', 'b']:
+                        log["q_status"] = "✅"
+                    if status_choice in ['j', 'b']:
+                        log["jira_status"] = "✅"
+                    count += 1
+
+            status_updated = []
+            if status_choice in ['q', 'b']:
+                status_updated.append("Q")
+            if status_choice in ['j', 'b']:
+                status_updated.append("Jira")
+            print(f"\nMarked {count} log(s) as checked for {date_str} ({', '.join(status_updated)}).")
+            if count > 0:
+                self.save_logs()
+
+            while True:
+                again = input("\nDo you want to do it for another date? (y/n): ").lower()
+                if again == 'n':
+                    return
+                if again == 'y':
+                    break
+                print("Unesi 'y' ili 'n'.")
 
     def mark_all_day_as_unchecked(self):
-        print(self.term.clear)
-        print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Unchecked" + self.term.normal)
-
         while True:
-            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
-            if status_choice == '0':
-                return
-            if status_choice in ['q', 'j', 'b']:
-                break
-            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+            print(self.term.clear)
+            print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Unchecked" + self.term.normal)
 
-        print("\nLast 5 days:")
-        for i in range(5):
-            d = datetime.now() - timedelta(days=i)
-            print(f"  {d.strftime('%d.%m.%Y')}")
-        date_str = input("\nEnter date (DD.MM.YYYY): ").strip()
-        try:
-            datetime.strptime(date_str, "%d.%m.%Y")
-        except ValueError:
-            print("Invalid date format. Please use DD.MM.YYYY.")
-            input("\nPress Enter to continue...")
-            return
+            while True:
+                status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+                if status_choice == '0':
+                    return
+                if status_choice in ['q', 'j', 'b']:
+                    break
+                print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
 
-        count = 0
-        for log in self.logs:
-            log_date = log['timestamp'].split()[0]
-            if log_date == date_str:
-                if status_choice in ['q', 'b']:
-                    log["q_status"] = "❌"
-                if status_choice in ['j', 'b']:
-                    log["jira_status"] = "❌"
-                count += 1
+            last_5_days = [(datetime.now() - timedelta(days=i)).strftime('%d.%m.%Y') for i in range(5)]
+            print("\nLast 5 days:")
+            for idx, d in enumerate(last_5_days, 1):
+                print(f"  {idx}. {d}")
+            date_input = input("\nEnter date (1-5 or DD.MM.YYYY): ").strip()
+            if date_input in ['1', '2', '3', '4', '5']:
+                date_str = last_5_days[int(date_input) - 1]
+            else:
+                date_str = date_input
+            try:
+                datetime.strptime(date_str, "%d.%m.%Y")
+            except ValueError:
+                print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
+                input("\nPress Enter to continue...")
+                continue
 
-        status_updated = []
-        if status_choice in ['q', 'b']:
-            status_updated.append("Q")
-        if status_choice in ['j', 'b']:
-            status_updated.append("Jira")
-        print(f"\nMarked {count} log(s) as unchecked for {date_str} ({', '.join(status_updated)}).")
-        if count > 0:
-            self.save_logs()
-        input("\nPress Enter to continue...")
+            count = 0
+            for log in self.logs:
+                log_date = log['timestamp'].split()[0]
+                if log_date == date_str:
+                    if status_choice in ['q', 'b']:
+                        log["q_status"] = "❌"
+                    if status_choice in ['j', 'b']:
+                        log["jira_status"] = "❌"
+                    count += 1
+
+            status_updated = []
+            if status_choice in ['q', 'b']:
+                status_updated.append("Q")
+            if status_choice in ['j', 'b']:
+                status_updated.append("Jira")
+            print(f"\nMarked {count} log(s) as unchecked for {date_str} ({', '.join(status_updated)}).")
+            if count > 0:
+                self.save_logs()
+
+            while True:
+                again = input("\nDo you want to do it for another date? (y/n): ").lower()
+                if again == 'n':
+                    return
+                if again == 'y':
+                    break
+                print("Unesi 'y' ili 'n'.")
 
     def edit_subtasks(self):
         print(self.term.clear)
