@@ -2,6 +2,8 @@
 
 A retro-style command-line tool for logging your work hours and tasks. Perfect for keeping track of your daily activities with a touch of nostalgia.
 
+![B-logger banner](banner-image.png)
+
 ## Features
 
 - 📝 Create and manage work logs with timestamps
