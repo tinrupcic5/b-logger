@@ -371,6 +371,29 @@ class BLogger:
         
         input("\nPress Enter to return to main menu...")
 
+    def display_about(self):
+        """Display about information"""
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + "About B-Logger" + self.term.normal)
+
+        print("\n" + self.term.underline + "B-Logger" + self.term.normal)
+        print("A terminal-based time logging application that helps you track your work tasks and their status.")
+
+        print("\n" + self.term.underline + "Author:" + self.term.normal)
+        print("  Edde")
+
+        print("\n" + self.term.underline + "Version:" + self.term.normal)
+        print("  V1.0.12")
+
+        print("\n" + self.term.underline + "GitHub:" + self.term.normal)
+        print("  https://github.com/tinrupcic5/b-logger.git")
+
+        print("\n" + self.term.underline + "License:" + self.term.normal)
+        print("  Edde License")
+        print("  See LICENSE file for details.")
+
+        input("\nPress Enter to return to main menu...")
+
     def mark_as_checked(self):
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Mark Log as Checked" + self.term.normal)
@@ -480,12 +503,25 @@ class BLogger:
                     break
                 print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
 
-            last_5_days = [(datetime.now() - timedelta(days=i)).strftime('%d.%m.%Y') for i in range(5)]
-            print("\nLast 5 days:")
+            # Last 5 dates that have logs (newest first)
+            dates_with_logs = sorted(
+                set(log['timestamp'].split()[0] for log in self.logs),
+                key=lambda d: datetime.strptime(d, "%d.%m.%Y"),
+                reverse=True
+            )
+            last_5_days = dates_with_logs[:5]
+            print("\nLast 5 days with logs:")
             for idx, d in enumerate(last_5_days, 1):
                 print(f"  {idx}. {d}")
-            date_input = input("\nEnter date (1-5 or DD.MM.YYYY): ").strip()
-            if date_input in ['1', '2', '3', '4', '5']:
+                logs_for_day = [log for log in self.logs if log['timestamp'].split()[0] == d]
+                for log in logs_for_day:
+                    hours = f" ({log['hours']})" if log.get('hours') else ""
+                    print(f"      {log['ticket']}{hours}  Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}")
+            if not last_5_days:
+                print("  (no logs yet)")
+            date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
+            date_input = input(date_prompt).strip()
+            if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
                 date_str = last_5_days[int(date_input) - 1]
             else:
                 date_str = date_input
@@ -536,12 +572,25 @@ class BLogger:
                     break
                 print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
 
-            last_5_days = [(datetime.now() - timedelta(days=i)).strftime('%d.%m.%Y') for i in range(5)]
-            print("\nLast 5 days:")
+            # Last 5 dates that have logs (newest first)
+            dates_with_logs = sorted(
+                set(log['timestamp'].split()[0] for log in self.logs),
+                key=lambda d: datetime.strptime(d, "%d.%m.%Y"),
+                reverse=True
+            )
+            last_5_days = dates_with_logs[:5]
+            print("\nLast 5 days with logs:")
             for idx, d in enumerate(last_5_days, 1):
                 print(f"  {idx}. {d}")
-            date_input = input("\nEnter date (1-5 or DD.MM.YYYY): ").strip()
-            if date_input in ['1', '2', '3', '4', '5']:
+                logs_for_day = [log for log in self.logs if log['timestamp'].split()[0] == d]
+                for log in logs_for_day:
+                    hours = f" ({log['hours']})" if log.get('hours') else ""
+                    print(f"      {log['ticket']}{hours}  Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}")
+            if not last_5_days:
+                print("  (no logs yet)")
+            date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
+            date_input = input(date_prompt).strip()
+            if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
                 date_str = last_5_days[int(date_input) - 1]
             else:
                 date_str = date_input
@@ -1661,10 +1710,11 @@ class BLogger:
             print("5. Settings")
             print("6. Help")
             print("7. Statistics")
-            print("8. Exit")
+            print("8. About")
+            print("9. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-8): ")
+                choice = input("\nEnter your choice (1-9): ")
                 
                 if choice == "1":  # Logs submenu
                     while True:
@@ -1789,6 +1839,10 @@ class BLogger:
                     self.reset_screen()
                 
                 elif choice == "8":
+                    self.display_about()
+                    self.reset_screen()
+                
+                elif choice == "9":
                     self.running = False
                     break
                 

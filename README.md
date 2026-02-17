@@ -24,7 +24,7 @@ A retro-style command-line tool for logging your work hours and tasks. Perfect f
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/b-logger.git
+git clone https://github.com/tinrupcic5/b-logger.git
 cd b-logger
 ```
 
@@ -43,13 +43,13 @@ python b_logger.py
 ### Main Menu
 
 1. Logs
-2. View current sprint
-3. View sprint history
-4. Migration script
-5. Important Links
-6. Settings
-7. Help
-8. Statistics
+2. Sprint
+3. Migration script
+4. Important Links
+5. Settings
+6. Help
+7. Statistics
+8. About
 9. Exit
 
 ### Logs Menu
@@ -178,9 +178,15 @@ When creating a new log, you can use a custom date:
   - blessed
   - python-dateutil
 
+## About
+
+- **Author:** Edde
+- **Version:** V1.0.12
+- **GitHub:** [https://github.com/tinrupcic5/b-logger](https://github.com/tinrupcic5/b-logger.git)
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the **Edde License** - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
