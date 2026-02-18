@@ -1524,13 +1524,36 @@ class BLogger:
     def view_logs_for_date(self):
         print(self.term.clear)
         print(self.term.black_on_white + "View Logs for a Date" + self.term.normal)
-        date_str = input("\nEnter date (DD.MM.YYYY): ").strip()
+
+        # Last 5 dates that have logs (newest first)
+        dates_with_logs = sorted(
+            set(log['timestamp'].split()[0] for log in self.logs),
+            key=lambda d: datetime.strptime(d, "%d.%m.%Y"),
+            reverse=True
+        )
+        last_5_days = dates_with_logs[:5]
+        print("\nLast 5 days with logs:")
+        for idx, d in enumerate(last_5_days, 1):
+            print(f"  {idx}. {d}")
+            logs_for_day = [log for log in self.logs if log['timestamp'].split()[0] == d]
+            for log in logs_for_day:
+                hours = f" ({log['hours']})" if log.get('hours') else ""
+                print(f"      {log['ticket']}{hours}  Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}")
+        if not last_5_days:
+            print("  (no logs yet)")
+        date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
+        date_input = input(date_prompt).strip()
+        if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
+            date_str = last_5_days[int(date_input) - 1]
+        else:
+            date_str = date_input
         try:
             datetime.strptime(date_str, "%d.%m.%Y")
         except ValueError:
-            print("Invalid date format. Please use DD.MM.YYYY.")
+            print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
             input("\nPress Enter to continue...")
             return
+
         found = False
         output_lines = []
         for log in self.logs:
