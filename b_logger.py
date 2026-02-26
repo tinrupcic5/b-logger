@@ -96,11 +96,21 @@ class BLogger:
         
         else:
             current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        
+
         ticket = input("Enter your log here: ")
         if ticket.lower() in ['0', 'exit']:
             return
-        
+
+        log_date = current_time.split()[0]
+        day_total_minutes = sum(
+            self.parse_hours(log.get('hours', ''))
+            for log in self.logs
+            if log['timestamp'].split()[0] == log_date
+        )
+        logged_so_far = self.format_hours(day_total_minutes)
+        if logged_so_far:
+            print(f"For {log_date} you logged {logged_so_far}")
+
         hours = input("Enter hours (e.g., 1h 30m or just 30m): ")
         if hours.lower() in ['0', 'exit']:
             return
