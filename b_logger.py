@@ -7,6 +7,12 @@ import signal
 from datetime import datetime, timedelta
 from blessed import Terminal
 from dateutil import parser
+from typing import Optional
+
+try:
+    import readline  # Enables proper line editing for input() on many systems.
+except Exception:  # pragma: no cover
+    readline = None
 
 class BLogger:
     def __init__(self):
@@ -26,9 +32,74 @@ class BLogger:
         self.links = self.load_links()
         self.input_history = []
         self.history_index = 0
+        self._configure_readline()
         
         # Set up signal handler for Ctrl+C
         signal.signal(signal.SIGINT, self.handle_exit)
+
+    def _configure_readline(self) -> None:
+        """
+        Configure readline/libedit keybindings (best-effort).
+
+        This fixes common Mac terminal behavior where Option+Arrow sends an
+        escape sequence. We map it to beginning/end-of-line for a Mac-like feel.
+        """
+        if readline is None:
+            return
+
+        try:
+            readline.parse_and_bind("set editing-mode emacs")
+        except Exception:
+            pass
+
+        # Detect macOS libedit-backed "readline" (common on system Python builds).
+        is_libedit = False
+        try:
+            is_libedit = bool(getattr(readline, "__doc__", "") and "libedit" in readline.__doc__)
+        except Exception:
+            is_libedit = False
+
+        if is_libedit:
+            # libedit uses different bind command names.
+            # Note: In most terminals, Option == Alt (escape prefix).
+            libedit_binds = [
+                r'bind "\e[1;3D" ed-move-to-beg',  # Option+Left (xterm)
+                r'bind "\e[1;3C" ed-move-to-end',  # Option+Right (xterm)
+                r'bind "\e[1;9D" ed-move-to-beg',  # Option+Left (some terminals)
+                r'bind "\e[1;9C" ed-move-to-end',  # Option+Right (some terminals)
+                r'bind "\e[3D" ed-move-to-beg',    # Fallback
+                r'bind "\e[3C" ed-move-to-end',    # Fallback
+            ]
+            for bind in libedit_binds:
+                try:
+                    readline.parse_and_bind(bind)
+                except Exception:
+                    pass
+        else:
+            # GNU readline style.
+            sequences = [
+                r'"\e[1;3D": beginning-of-line',  # Option+Left (xterm)
+                r'"\e[1;3C": end-of-line',        # Option+Right (xterm)
+                r'"\e[1;9D": beginning-of-line',  # Option+Left (some terminals)
+                r'"\e[1;9C": end-of-line',        # Option+Right (some terminals)
+                r'"\e[3D": beginning-of-line',    # Fallback
+                r'"\e[3C": end-of-line',          # Fallback
+                r'"\e;3D": beginning-of-line',    # Some terminals omit '['
+                r'"\e;3C": end-of-line',          # Some terminals omit '['
+            ]
+            for bind in sequences:
+                try:
+                    readline.parse_and_bind(bind)
+                except Exception:
+                    pass
+
+    def ask(self, text: str) -> str:
+        """
+        Read a single-line input with proper line-editing when possible.
+        This uses builtin input(); line-editing is provided by readline if
+        available (configured in __init__).
+        """
+        return input(text)
 
     def handle_exit(self, signum, frame):
         """Handle clean exit on Ctrl+C"""
@@ -74,7 +145,7 @@ class BLogger:
         
         # Ask about custom date
         while True:
-            use_custom_date = input("Do you want to use a different date? (y/n): ").lower()
+            use_custom_date = self.ask("Do you want to use a different date? (y/n): ").lower()
             if use_custom_date in ['0', 'exit']:
                 return
             if use_custom_date in ['y', 'n']:
@@ -84,7 +155,7 @@ class BLogger:
         if use_custom_date == 'y':
             while True:
                 try:
-                    custom_date = input("Enter date (DD.MM.YYYY) or 0/exit to cancel: ")
+                    custom_date = self.ask("Enter date (DD.MM.YYYY) or 0/exit to cancel: ")
                     if custom_date.lower() in ['0', 'exit']:
                         return
                     # Validate date format
@@ -97,7 +168,7 @@ class BLogger:
         else:
             current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
-        ticket = input("Enter your log here: ")
+        ticket = self.ask("Enter your log here: ")
         if ticket.lower() in ['0', 'exit']:
             return
 
@@ -111,7 +182,7 @@ class BLogger:
         if logged_so_far:
             print(f"For {log_date} you logged {logged_so_far}")
 
-        hours = input("Enter hours (e.g., 1h 30m or just 30m): ")
+        hours = self.ask("Enter hours (e.g., 1h 30m or just 30m): ")
         if hours.lower() in ['0', 'exit']:
             return
         
@@ -133,23 +204,23 @@ class BLogger:
         print(f"Current log: {self.current_log['ticket']} - {self.current_log['hours']} hours")
         
         # Ask if user wants to update hours
-        update_hours = input("Do you want to update hours? (y/n): ").lower()
+        update_hours = self.ask("Do you want to update hours? (y/n): ").lower()
         if update_hours == 'y':
-            new_hours = input("Enter new hours: ")
+            new_hours = self.ask("Enter new hours: ")
             self.current_log["hours"] = new_hours
         
-        q_status = input("Update Q log status (x for ❌, c for ✅): ").lower()
-        jira_status = input("Update Jira log status (x for ❌, c for ✅): ").lower()
+        q_status = self.ask("Update Q log status (x for ❌, c for ✅): ").lower()
+        jira_status = self.ask("Update Jira log status (x for ❌, c for ✅): ").lower()
         
         self.current_log["q_status"] = "✅" if q_status == "c" else "❌"
         self.current_log["jira_status"] = "✅" if jira_status == "c" else "❌"
         
         while True:
-            subtask = input("Add subtask? (y/n): ").lower()
+            subtask = self.ask("Add subtask? (y/n): ").lower()
             if subtask != "y":
                 break
                 
-            subtask_desc = input("Enter subtask description: ")
+            subtask_desc = self.ask("Enter subtask description: ")
             self.current_log["subtasks"].append(subtask_desc)
             print(f"Added subtask: {subtask_desc}")
             print("Current subtasks:")
@@ -251,7 +322,7 @@ class BLogger:
         print(self.term.move_y(0) + self.term.black_on_white + "Edit Log" + self.term.normal)
         self.display_logs()
         try:
-            log_index = int(input("\nEnter log number to edit (0 to exit): ")) - 1
+            log_index = int(self.ask("\nEnter log number to edit (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -261,10 +332,10 @@ class BLogger:
                 self.current_log = self.logs[log_index]
                 
                 # Ask if user wants to edit description
-                edit_desc = input("Do you want to edit the description? (y/n): ").lower()
+                edit_desc = self.ask("Do you want to edit the description? (y/n): ").lower()
                 if edit_desc == 'y':
                     print(f"\nCurrent description: {self.current_log['ticket']}")
-                    new_desc = input("Enter new description: ")
+                    new_desc = self.ask("Enter new description: ")
                     if new_desc.strip():  # Only update if new description is not empty
                         self.current_log["ticket"] = new_desc
                 
@@ -278,20 +349,20 @@ class BLogger:
         print(self.term.clear)
         self.display_logs()
         try:
-            log_index = int(input("Enter log number to delete (0 to exit): ")) - 1
+            log_index = int(self.ask("Enter log number to delete (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
             if 0 <= log_index < len(self.logs):
-                confirm = input(f"Are you sure you want to delete log {log_index + 1}? (y/n): ").lower()
+                confirm = self.ask(f"Are you sure you want to delete log {log_index + 1}? (y/n): ").lower()
                 if confirm == 'y':
                     deleted_log = self.logs.pop(log_index)
                     print(f"Deleted log: {deleted_log['ticket']} - {deleted_log['hours']} hours")
                     self.save_logs()
-                    input("\nPress Enter to continue...")
+                    self.ask("\nPress Enter to continue...")
         except ValueError:
             print("Invalid input")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
 
     def reset_screen(self):
         """Clear screen and show banner"""
@@ -379,7 +450,7 @@ class BLogger:
         print("- Use custom dates for historical entries")
         print("- Check statistics to monitor your work patterns")
         
-        input("\nPress Enter to return to main menu...")
+        self.ask("\nPress Enter to return to main menu...")
 
     def display_about(self):
         """Display about information"""
@@ -402,7 +473,7 @@ class BLogger:
         print("  Edde License")
         print("  See LICENSE file for details.")
 
-        input("\nPress Enter to return to main menu...")
+        self.ask("\nPress Enter to return to main menu...")
 
     def mark_as_checked(self):
         print(self.term.clear)
@@ -411,7 +482,7 @@ class BLogger:
         
         # Ask which status to update
         while True:
-            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+            status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
             if status_choice == '0':
                 return
             if status_choice in ['q', 'j', 'b']:
@@ -419,7 +490,7 @@ class BLogger:
             print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
         
         try:
-            log_index = int(input("\nEnter log number to mark as checked (0 to exit): ")) - 1
+            log_index = int(self.ask("\nEnter log number to mark as checked (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -440,7 +511,7 @@ class BLogger:
                 
                 # Ask if user wants to mark another log
                 while True:
-                    another = input("\nDo you want to mark another log as checked? (y/n): ").lower()
+                    another = self.ask("\nDo you want to mark another log as checked? (y/n): ").lower()
                     if another == 'y':
                         self.mark_as_checked()
                         break
@@ -450,7 +521,7 @@ class BLogger:
                         print("Please enter 'y' or 'n'")
         except ValueError:
             print("Invalid input")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
 
     def mark_as_unchecked(self):
         print(self.term.clear)
@@ -459,7 +530,7 @@ class BLogger:
         
         # Ask which status to update
         while True:
-            status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+            status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
             if status_choice == '0':
                 return
             if status_choice in ['q', 'j', 'b']:
@@ -467,7 +538,7 @@ class BLogger:
             print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
         
         try:
-            log_index = int(input("\nEnter log number to mark as unchecked (0 to exit): ")) - 1
+            log_index = int(self.ask("\nEnter log number to mark as unchecked (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -488,7 +559,7 @@ class BLogger:
                 
                 # Ask if user wants to mark another log
                 while True:
-                    another = input("\nDo you want to mark another log as unchecked? (y/n): ").lower()
+                    another = self.ask("\nDo you want to mark another log as unchecked? (y/n): ").lower()
                     if another == 'y':
                         self.mark_as_unchecked()
                         break
@@ -498,7 +569,7 @@ class BLogger:
                         print("Please enter 'y' or 'n'")
         except ValueError:
             print("Invalid input")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
 
     def mark_all_day_as_checked(self):
         while True:
@@ -506,7 +577,7 @@ class BLogger:
             print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Checked" + self.term.normal)
 
             while True:
-                status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+                status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
                 if status_choice == '0':
                     return
                 if status_choice in ['q', 'j', 'b']:
@@ -530,7 +601,7 @@ class BLogger:
             if not last_5_days:
                 print("  (no logs yet)")
             date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
-            date_input = input(date_prompt).strip()
+            date_input = self.ask(date_prompt).strip()
             if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
                 date_str = last_5_days[int(date_input) - 1]
             else:
@@ -539,7 +610,7 @@ class BLogger:
                 datetime.strptime(date_str, "%d.%m.%Y")
             except ValueError:
                 print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
-                input("\nPress Enter to continue...")
+                self.ask("\nPress Enter to continue...")
                 continue
 
             count = 0
@@ -562,7 +633,7 @@ class BLogger:
                 self.save_logs()
 
             while True:
-                again = input("\nDo you want to do it for another date? (y/n): ").lower()
+                again = self.ask("\nDo you want to do it for another date? (y/n): ").lower()
                 if again == 'n':
                     return
                 if again == 'y':
@@ -575,7 +646,7 @@ class BLogger:
             print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Unchecked" + self.term.normal)
 
             while True:
-                status_choice = input("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
+                status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
                 if status_choice == '0':
                     return
                 if status_choice in ['q', 'j', 'b']:
@@ -599,7 +670,7 @@ class BLogger:
             if not last_5_days:
                 print("  (no logs yet)")
             date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
-            date_input = input(date_prompt).strip()
+            date_input = self.ask(date_prompt).strip()
             if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
                 date_str = last_5_days[int(date_input) - 1]
             else:
@@ -608,7 +679,7 @@ class BLogger:
                 datetime.strptime(date_str, "%d.%m.%Y")
             except ValueError:
                 print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
-                input("\nPress Enter to continue...")
+                self.ask("\nPress Enter to continue...")
                 continue
 
             count = 0
@@ -631,7 +702,7 @@ class BLogger:
                 self.save_logs()
 
             while True:
-                again = input("\nDo you want to do it for another date? (y/n): ").lower()
+                again = self.ask("\nDo you want to do it for another date? (y/n): ").lower()
                 if again == 'n':
                     return
                 if again == 'y':
@@ -643,7 +714,7 @@ class BLogger:
         print(self.term.move_y(0) + self.term.black_on_white + "Edit Subtasks" + self.term.normal)
         self.display_logs()
         try:
-            log_index = int(input("\nEnter log number to edit subtasks (0 to exit): ")) - 1
+            log_index = int(self.ask("\nEnter log number to edit subtasks (0 to exit): ")) - 1
             if log_index == -1:
                 return
             
@@ -651,7 +722,7 @@ class BLogger:
                 log = self.logs[log_index]
                 if not log['subtasks']:
                     print("\nThis log has no subtasks.")
-                    input("\nPress Enter to continue...")
+                    self.ask("\nPress Enter to continue...")
                     return
                 
                 print(f"\nCurrent subtasks for log {log_index + 1}:")
@@ -664,18 +735,18 @@ class BLogger:
                     print("2. Delete subtask")
                     print("0. Return to main menu")
                     
-                    option = input("\nEnter your choice (0-2): ").strip()
+                    option = self.ask("\nEnter your choice (0-2): ").strip()
                     
                     if option == "0":
                         break
                     elif option in ["1", "2"]:
-                        subtask_input = input("\nEnter subtask number: ").strip()
+                        subtask_input = self.ask("\nEnter subtask number: ").strip()
                         try:
                             subtask_index = int(subtask_input) - 1
                             if 0 <= subtask_index < len(log['subtasks']):
                                 if option == "1":
                                     print(f"\nCurrent subtask: {log['subtasks'][subtask_index]}")
-                                    new_subtask = input("Enter new subtask description: ")
+                                    new_subtask = self.ask("Enter new subtask description: ")
                                     if new_subtask.strip():
                                         log['subtasks'][subtask_index] = new_subtask
                                         print("Subtask updated successfully!")
@@ -698,10 +769,10 @@ class BLogger:
                 
                 self.save_logs()
                 print("\nChanges saved successfully!")
-                input("\nPress Enter to continue...")
+                self.ask("\nPress Enter to continue...")
         except ValueError:
             print("Invalid input")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
 
     def load_settings(self):
         """Load settings from file or create default settings"""
@@ -743,7 +814,7 @@ class BLogger:
             print("4. Return to Main Menu")
             
             try:
-                choice = input("\nEnter your choice (1-4): ")
+                choice = self.ask("\nEnter your choice (1-4): ")
                 
                 if choice == "1":
                     self.manage_log_types()
@@ -773,11 +844,11 @@ class BLogger:
             print("4. Return to Settings")
             
             try:
-                choice = input("\nEnter your choice (1-4): ")
+                choice = self.ask("\nEnter your choice (1-4): ")
                 
                 if choice == "1":
-                    name = input("Enter log type name: ")
-                    prefix = input("Enter log type prefix: ")
+                    name = self.ask("Enter log type name: ")
+                    prefix = self.ask("Enter log type prefix: ")
                     self.settings["log_types"].append({
                         "name": name,
                         "prefix": prefix,
@@ -791,11 +862,11 @@ class BLogger:
                         print("No log types to edit.")
                         continue
                     
-                    index = int(input("Enter log type number to edit: ")) - 1
+                    index = int(self.ask("Enter log type number to edit: ")) - 1
                     if 0 <= index < len(self.settings["log_types"]):
                         log_type = self.settings["log_types"][index]
-                        name = input(f"Enter new name [{log_type['name']}]: ") or log_type['name']
-                        prefix = input(f"Enter new prefix [{log_type['prefix']}]: ") or log_type['prefix']
+                        name = self.ask(f"Enter new name [{log_type['name']}]: ") or log_type['name']
+                        prefix = self.ask(f"Enter new prefix [{log_type['prefix']}]: ") or log_type['prefix']
                         self.settings["log_types"][index] = {
                             "name": name,
                             "prefix": prefix,
@@ -811,7 +882,7 @@ class BLogger:
                         print("No log types to delete.")
                         continue
                     
-                    index = int(input("Enter log type number to delete: ")) - 1
+                    index = int(self.ask("Enter log type number to delete: ")) - 1
                     if 0 <= index < len(self.settings["log_types"]):
                         del self.settings["log_types"][index]
                         self.save_settings()
@@ -844,11 +915,11 @@ class BLogger:
             print("3. Return to Settings")
             
             try:
-                choice = input("\nEnter your choice (1-3): ")
+                choice = self.ask("\nEnter your choice (1-3): ")
                 
                 if choice == "1":
                     while True:
-                        new_date = input("Enter new start date (YYYY-MM-DD): ")
+                        new_date = self.ask("Enter new start date (YYYY-MM-DD): ")
                         try:
                             datetime.strptime(new_date, "%Y-%m-%d")
                             self.settings["sprint_config"]["start_date"] = new_date
@@ -861,7 +932,7 @@ class BLogger:
                 elif choice == "2":
                     while True:
                         try:
-                            new_duration = int(input("Enter new sprint duration in weeks: "))
+                            new_duration = int(self.ask("Enter new sprint duration in weeks: "))
                             if new_duration > 0:
                                 self.settings["sprint_config"]["duration_weeks"] = new_duration
                                 self.save_settings()
@@ -893,7 +964,7 @@ class BLogger:
         print(f"Start Date: {self.settings['sprint_config']['start_date']}")
         print(f"Duration: {self.settings['sprint_config']['duration_weeks']} weeks")
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def get_sprint_dates(self, sprint_number=None):
         """Get start and end dates for a specific sprint number or current sprint"""
@@ -919,7 +990,7 @@ class BLogger:
         
         if not self.logs:
             print("\nNo logs found.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
             
         # Find the earliest and latest log dates
@@ -967,7 +1038,7 @@ class BLogger:
                 
                 print("-" * 72)
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def view_sprint_logs(self):
         print(self.term.clear)
@@ -987,7 +1058,7 @@ class BLogger:
         
         if not sprint_logs:
             print("\nNo logs found for the current sprint.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         # Get distinct QI- logs
@@ -1021,7 +1092,7 @@ class BLogger:
                 print(f"\n  {self.term.yellow(current_date)}")
             print(f"    {self.term.cyan(log['ticket'])}")
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def display_statistics(self):
         """Display statistics and charts for logs in the last 10 workdays"""
@@ -1030,7 +1101,7 @@ class BLogger:
         
         if not self.logs:
             print("\nNo logs found.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         # Get current date and calculate date 14 days ago (to ensure we get 10 workdays)
@@ -1046,7 +1117,7 @@ class BLogger:
         
         if not recent_logs:
             print("\nNo logs found in the last 10 workdays.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         # Get unique workdays from the logs
@@ -1143,7 +1214,7 @@ class BLogger:
                 print(f"{date}: {bar} {num_logs} logs")
         
         print("\n* Today's date")
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def load_scripts(self):
         """Load migration scripts from file"""
@@ -1164,7 +1235,7 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Log Migration Script" + self.term.normal)
         
-        ticket = input("\nEnter ticket: ").strip()
+        ticket = self.ask("\nEnter ticket: ").strip()
         if not ticket or ticket.lower() in ['0', 'exit']:
             return
         
@@ -1172,7 +1243,7 @@ class BLogger:
         print("(You can enter multiple lines with spaces and newlines)")
         script_lines = []
         while True:
-            line = input()
+            line = self.ask("")
             if line.lower() in ['0', 'exit']:
                 return
             if line == "" and script_lines and script_lines[-1] == "":
@@ -1184,26 +1255,26 @@ class BLogger:
         script = '\n'.join(script_lines)
         if not script.strip():
             print("Script cannot be empty!")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         # Get status for Demo
         while True:
-            demo_status = input("Update Demo status (x for ❌, c for ✅): ").lower()
+            demo_status = self.ask("Update Demo status (x for ❌, c for ✅): ").lower()
             if demo_status in ['x', 'c']:
                 break
             print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
         
         # Get status for Stage
         while True:
-            stage_status = input("Update Stage status (x for ❌, c for ✅): ").lower()
+            stage_status = self.ask("Update Stage status (x for ❌, c for ✅): ").lower()
             if stage_status in ['x', 'c']:
                 break
             print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
         
         # Get status for Release notes
         while True:
-            release_status = input("Update Release notes status (x for ❌, c for ✅): ").lower()
+            release_status = self.ask("Update Release notes status (x for ❌, c for ✅): ").lower()
             if release_status in ['x', 'c']:
                 break
             print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
@@ -1222,7 +1293,7 @@ class BLogger:
         self.scripts.append(new_script)
         self.save_scripts()
         print("\nMigration script logged successfully!")
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def view_migration_scripts(self):
         """View all migration scripts"""
@@ -1231,7 +1302,7 @@ class BLogger:
         
         if not self.scripts:
             print("\nNo migration scripts found.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         print("\nMigration Scripts:")
@@ -1249,7 +1320,7 @@ class BLogger:
             print(f"   Release Notes: {script.get('release_status', '❌')}")
             print("-" * 72)
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def edit_migration_script(self):
         """Edit an existing migration script"""
@@ -1258,7 +1329,7 @@ class BLogger:
         
         if not self.scripts:
             print("\nNo migration scripts found.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         print("\nMigration Scripts:")
@@ -1276,7 +1347,7 @@ class BLogger:
             print("-" * 72)
         
         try:
-            script_index = int(input("\nEnter script number to edit (0 to exit): ")) - 1
+            script_index = int(self.ask("\nEnter script number to edit (0 to exit): ")) - 1
             if script_index == -1:
                 return
             
@@ -1285,7 +1356,7 @@ class BLogger:
                 
                 # Edit ticket
                 print(f"\nCurrent ticket: {script['ticket']}")
-                new_ticket = input("Enter new ticket (press Enter to keep current): ").strip()
+                new_ticket = self.ask("Enter new ticket (press Enter to keep current): ").strip()
                 if new_ticket:
                     script['ticket'] = new_ticket
                 
@@ -1298,7 +1369,7 @@ class BLogger:
                 print("(You can enter multiple lines with spaces and newlines)")
                 new_script_lines = []
                 while True:
-                    line = input()
+                    line = self.ask("")
                     if line == "" and new_script_lines and new_script_lines[-1] == "":
                         # Two consecutive empty lines means end of input
                         new_script_lines.pop()  # Remove the last empty line
@@ -1318,7 +1389,7 @@ class BLogger:
                 # Edit Demo status
                 print(f"\nCurrent Demo status: {script.get('demo_status', '❌')}")
                 while True:
-                    demo_status = input("Update Demo status (x for ❌, c for ✅, Enter to keep current): ").lower()
+                    demo_status = self.ask("Update Demo status (x for ❌, c for ✅, Enter to keep current): ").lower()
                     if not demo_status:
                         break
                     if demo_status in ['x', 'c']:
@@ -1329,7 +1400,7 @@ class BLogger:
                 # Edit Stage status
                 print(f"\nCurrent Stage status: {script.get('stage_status', '❌')}")
                 while True:
-                    stage_status = input("Update Stage status (x for ❌, c for ✅, Enter to keep current): ").lower()
+                    stage_status = self.ask("Update Stage status (x for ❌, c for ✅, Enter to keep current): ").lower()
                     if not stage_status:
                         break
                     if stage_status in ['x', 'c']:
@@ -1340,7 +1411,7 @@ class BLogger:
                 # Edit Release notes status
                 print(f"\nCurrent Release notes status: {script.get('release_status', '❌')}")
                 while True:
-                    release_status = input("Update Release notes status (x for ❌, c for ✅, Enter to keep current): ").lower()
+                    release_status = self.ask("Update Release notes status (x for ❌, c for ✅, Enter to keep current): ").lower()
                     if not release_status:
                         break
                     if release_status in ['x', 'c']:
@@ -1351,10 +1422,10 @@ class BLogger:
                 self.scripts[script_index] = script
                 self.save_scripts()
                 print("\nMigration script updated successfully!")
-                input("\nPress Enter to continue...")
+                self.ask("\nPress Enter to continue...")
         except ValueError:
             print("Invalid input")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
 
     def delete_migration_script(self):
         """Delete a migration script"""
@@ -1363,7 +1434,7 @@ class BLogger:
         
         if not self.scripts:
             print("\nNo migration scripts found.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         print("\nMigration Scripts:")
@@ -1382,20 +1453,20 @@ class BLogger:
             print("-" * 72)
         
         try:
-            script_index = int(input("\nEnter script number to delete (0 to exit): ")) - 1
+            script_index = int(self.ask("\nEnter script number to delete (0 to exit): ")) - 1
             if script_index == -1:
                 return
             
             if 0 <= script_index < len(self.scripts):
-                confirm = input(f"Are you sure you want to delete script {script_index + 1}? (y/n): ").lower()
+                confirm = self.ask(f"Are you sure you want to delete script {script_index + 1}? (y/n): ").lower()
                 if confirm == 'y':
                     deleted_script = self.scripts.pop(script_index)
                     print(f"Deleted script: {deleted_script['ticket']}")
                     self.save_scripts()
-                    input("\nPress Enter to continue...")
+                    self.ask("\nPress Enter to continue...")
         except ValueError:
             print("Invalid input")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
 
     def load_links(self):
         try:
@@ -1420,13 +1491,13 @@ class BLogger:
         print(self.term.clear)
         print(self.term.black_on_white + "Add Important Link" + self.term.normal)
         
-        link = input("\nEnter the link: ").strip()
+        link = self.ask("\nEnter the link: ").strip()
         if not link:
             print("Link cannot be empty!")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
-        comments = input("Enter comments (optional): ").strip()
+        comments = self.ask("Enter comments (optional): ").strip()
         
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -1438,7 +1509,7 @@ class BLogger:
         
         self.save_links()
         print("\nLink added successfully!")
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def view_links(self):
         print(self.term.clear)
@@ -1446,7 +1517,7 @@ class BLogger:
         
         if not self.links["links"]:
             print("\nNo links found!")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         print("\nLinks:")
@@ -1458,7 +1529,7 @@ class BLogger:
                 print(f"   Comments: {link['comments']}")
             print("-" * 72)
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def edit_link(self):
         print(self.term.clear)
@@ -1466,7 +1537,7 @@ class BLogger:
         
         if not self.links["links"]:
             print("\nNo links found!")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         for i, link in enumerate(self.links["links"], 1):
@@ -1476,18 +1547,18 @@ class BLogger:
                 print(f"   Comments: {link['comments']}")
         
         try:
-            choice = int(input("\nEnter the number of the link to edit (0 to cancel): "))
+            choice = int(self.ask("\nEnter the number of the link to edit (0 to cancel): "))
             if choice == 0:
                 return
             if 1 <= choice <= len(self.links["links"]):
                 link = self.links["links"][choice - 1]
                 print(f"\nCurrent link: {link['link']}")
-                new_link = input("Enter new link (press Enter to keep current): ").strip()
+                new_link = self.ask("Enter new link (press Enter to keep current): ").strip()
                 if new_link:
                     link['link'] = new_link
                 
                 print(f"\nCurrent comments: {link['comments']}")
-                new_comments = input("Enter new comments (press Enter to keep current): ").strip()
+                new_comments = self.ask("Enter new comments (press Enter to keep current): ").strip()
                 if new_comments:
                     link['comments'] = new_comments
                 
@@ -1499,7 +1570,7 @@ class BLogger:
         except ValueError:
             print("\nPlease enter a valid number!")
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def delete_link(self):
         print(self.term.clear)
@@ -1507,7 +1578,7 @@ class BLogger:
         
         if not self.links["links"]:
             print("\nNo links found!")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         for i, link in enumerate(self.links["links"], 1):
@@ -1517,7 +1588,7 @@ class BLogger:
                 print(f"   Comments: {link['comments']}")
         
         try:
-            choice = int(input("\nEnter the number of the link to delete (0 to cancel): "))
+            choice = int(self.ask("\nEnter the number of the link to delete (0 to cancel): "))
             if choice == 0:
                 return
             if 1 <= choice <= len(self.links["links"]):
@@ -1529,7 +1600,7 @@ class BLogger:
         except ValueError:
             print("\nPlease enter a valid number!")
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def view_logs_for_date(self):
         print(self.term.clear)
@@ -1552,7 +1623,7 @@ class BLogger:
         if not last_5_days:
             print("  (no logs yet)")
         date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
-        date_input = input(date_prompt).strip()
+        date_input = self.ask(date_prompt).strip()
         if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
             date_str = last_5_days[int(date_input) - 1]
         else:
@@ -1561,7 +1632,7 @@ class BLogger:
             datetime.strptime(date_str, "%d.%m.%Y")
         except ValueError:
             print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
 
         found = False
@@ -1584,7 +1655,7 @@ class BLogger:
             print(f"\nNo logs found for {date_str}.")
         else:
             print("\n" + "\n".join(output_lines))
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def list_available_sprints(self):
         """List all available sprints with their dates and let user choose"""
@@ -1593,7 +1664,7 @@ class BLogger:
         
         if not self.logs:
             print("\nNo logs found.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return None
             
         # Find the earliest and latest log dates
@@ -1634,7 +1705,7 @@ class BLogger:
         
         if not available_sprints:
             print("\nNo sprints found.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return None
         
         # Display sprints with numbers
@@ -1655,18 +1726,18 @@ class BLogger:
         
         # Let user choose
         try:
-            choice = int(input(f"\nEnter sprint number (1-{len(available_sprints)}) or 0 to cancel: "))
+            choice = int(self.ask(f"\nEnter sprint number (1-{len(available_sprints)}) or 0 to cancel: "))
             if choice == 0:
                 return None
             if 1 <= choice <= len(available_sprints):
                 return available_sprints[choice - 1]['sprint_number']
             else:
                 print("\nInvalid choice!")
-                input("\nPress Enter to continue...")
+                self.ask("\nPress Enter to continue...")
                 return None
         except ValueError:
             print("\nPlease enter a valid number!")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return None
 
     def get_current_sprint_number(self):
@@ -1696,7 +1767,7 @@ class BLogger:
         
         if not sprint_logs:
             print("\nNo logs found for this sprint.")
-            input("\nPress Enter to continue...")
+            self.ask("\nPress Enter to continue...")
             return
         
         # Get distinct QI- logs
@@ -1730,7 +1801,7 @@ class BLogger:
                 print(f"\n  {self.term.yellow(current_date)}")
             print(f"    {self.term.cyan(log['ticket'])}")
         
-        input("\nPress Enter to continue...")
+        self.ask("\nPress Enter to continue...")
 
     def run(self):
         self.reset_screen()
@@ -1747,7 +1818,7 @@ class BLogger:
             print("9. Exit")
             
             try:
-                choice = input("\nEnter your choice (1-9): ")
+                choice = self.ask("\nEnter your choice (1-9): ")
                 
                 if choice == "1":  # Logs submenu
                     while True:
@@ -1765,14 +1836,14 @@ class BLogger:
                         print("10. Mark all day as unchecked")
                         print("0. Back to main menu")
                         
-                        subchoice = input("\nEnter your choice (0-10): ")
+                        subchoice = self.ask("\nEnter your choice (0-10): ")
                         if subchoice == "0":
                             break
                         elif subchoice == "1":
                             self.create_new_log()
                         elif subchoice == "2":
                             self.display_logs()
-                            input("\nPress Enter to continue...")
+                            self.ask("\nPress Enter to continue...")
                         elif subchoice == "3":
                             self.edit_log()
                         elif subchoice == "4":
@@ -1800,7 +1871,7 @@ class BLogger:
                         print("3. View sprint history")
                         print("0. Back to main menu")
                         
-                        subchoice = input("\nEnter your choice (0-3): ")
+                        subchoice = self.ask("\nEnter your choice (0-3): ")
                         if subchoice == "0":
                             break
                         elif subchoice == "1":
@@ -1823,7 +1894,7 @@ class BLogger:
                         print("4. Delete migration script")
                         print("0. Back to main menu")
                         
-                        subchoice = input("\nEnter your choice (0-4): ")
+                        subchoice = self.ask("\nEnter your choice (0-4): ")
                         if subchoice == "0":
                             break
                         elif subchoice == "1":
@@ -1846,7 +1917,7 @@ class BLogger:
                         print("4. Delete link")
                         print("0. Back to main menu")
                         
-                        subchoice = input("\nEnter your choice (0-4): ")
+                        subchoice = self.ask("\nEnter your choice (0-4): ")
                         if subchoice == "0":
                             break
                         elif subchoice == "1":
