@@ -37,6 +37,31 @@ class BLogger:
         # Set up signal handler for Ctrl+C
         signal.signal(signal.SIGINT, self.handle_exit)
 
+    def daily_target_minutes(self) -> int:
+        """Daily target: 8 hours."""
+        return 8 * 60
+
+    def format_minutes_signed(self, total_minutes: int) -> str:
+        """Format minutes, supporting negative values (e.g. "-2h 15m")."""
+        sign = "-" if total_minutes < 0 else ""
+        minutes_abs = abs(total_minutes)
+        if minutes_abs == 0:
+            return f"{sign}0h"
+        hours = minutes_abs // 60
+        minutes = minutes_abs % 60
+        if minutes == 0:
+            return f"{sign}{hours}h"
+        return f"{sign}{hours}h {minutes}m"
+
+    def color_remaining(self, remaining_minutes: int) -> str:
+        """Color remaining time to 8h: cyan (>0), green (=0), red (<0)."""
+        remaining_str = self.format_minutes_signed(remaining_minutes)
+        if remaining_minutes > 0:
+            return self.term.cyan(remaining_str)
+        if remaining_minutes == 0:
+            return self.term.green(remaining_str)
+        return self.term.red(remaining_str)
+
     def _configure_readline(self) -> None:
         """
         Configure readline/libedit keybindings (best-effort).
@@ -178,13 +203,25 @@ class BLogger:
             for log in self.logs
             if log['timestamp'].split()[0] == log_date
         )
-        logged_so_far = self.format_hours(day_total_minutes)
-        if logged_so_far:
-            print(f"For {log_date} you logged {logged_so_far}")
+        logged_so_far = self.format_hours(day_total_minutes) or "0h"
+        remaining_minutes = self.daily_target_minutes() - day_total_minutes
+        remaining_str = self.format_minutes_signed(remaining_minutes)
+        for_line = (
+            f"For {log_date} you logged {logged_so_far} and still have left {remaining_str}."
+        )
+        print(self.term.cyan(for_line))
 
         hours = self.ask("Enter hours (e.g., 1h 30m or just 30m): ")
         if hours.lower() in ['0', 'exit']:
             return
+
+        # Show what will remain after the entry (best-effort; "ongoing" parses to 0 minutes).
+        entered_minutes = self.parse_hours(hours)
+        remaining_after_minutes = self.daily_target_minutes() - (day_total_minutes + entered_minutes)
+        print(
+            f"After this entry, remaining for {log_date}: "
+            f"{self.color_remaining(remaining_after_minutes)}."
+        )
         
         self.current_log = {
             "timestamp": current_time,
@@ -206,7 +243,31 @@ class BLogger:
         # Ask if user wants to update hours
         update_hours = self.ask("Do you want to update hours? (y/n): ").lower()
         if update_hours == 'y':
+            log_date = self.current_log["timestamp"].split()[0]
+            day_total_minutes = sum(
+                self.parse_hours(log.get('hours', ''))
+                for log in self.logs
+                if log['timestamp'].split()[0] == log_date
+            )
+            current_log_minutes = self.parse_hours(self.current_log.get("hours", ""))
+            total_without_current = day_total_minutes - current_log_minutes
+
+            logged_so_far = self.format_hours(day_total_minutes) or "0h"
+            remaining_minutes = self.daily_target_minutes() - day_total_minutes
+            remaining_str = self.format_minutes_signed(remaining_minutes)
+            for_line = (
+                f"For {log_date} you logged {logged_so_far} and still have left {remaining_str}."
+            )
+            print(self.term.cyan(for_line))
+
             new_hours = self.ask("Enter new hours: ")
+            new_minutes = self.parse_hours(new_hours)
+            remaining_after_minutes = self.daily_target_minutes() - (total_without_current + new_minutes)
+            print(
+                f"After update, for {log_date} you logged "
+                f"{self.format_hours(total_without_current + new_minutes) or '0h'} and still have left "
+                f"{self.color_remaining(remaining_after_minutes)}."
+            )
             self.current_log["hours"] = new_hours
         
         q_status = self.ask("Update Q log status (x for ❌, c for ✅): ").lower()
