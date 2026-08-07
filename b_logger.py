@@ -121,19 +121,44 @@ class BLogger:
         selected = max(0, min(default_index, len(options) - 1))
         values = {value for value, _ in options}
         digit_buffer = ""
+        window_start = 0
+
+        def visible_capacity() -> int:
+            preamble_lines = preamble.count("\n") + 1 if preamble else 0
+            # title, blank, hint, optional scroll indicator, padding
+            reserved = preamble_lines + 5
+            return max(3, self.term.height - reserved)
+
+        def ensure_visible() -> None:
+            nonlocal window_start
+            capacity = visible_capacity()
+            if selected < window_start:
+                window_start = selected
+            elif selected >= window_start + capacity:
+                window_start = selected - capacity + 1
 
         def render() -> None:
+            ensure_visible()
+            capacity = visible_capacity()
+            window_end = min(len(options), window_start + capacity)
+
             print(self.term.clear + self.term.home, end="")
             if preamble:
                 print(preamble)
             print(self.term.black_on_white + title + self.term.normal)
             print()
-            for i, (value, label) in enumerate(options):
+            if window_start > 0:
+                print(self.term.dim + f"   ↑ {window_start} more" + self.term.normal)
+            for i in range(window_start, window_end):
+                value, label = options[i]
                 line = f"{value}. {label}"
                 if i == selected:
                     print(self.term.black_on_white(f" > {line} ") + self.term.normal)
                 else:
                     print(f"   {line}")
+            remaining = len(options) - window_end
+            if remaining > 0:
+                print(self.term.dim + f"   ↓ {remaining} more" + self.term.normal)
             print()
             hint = "↑/↓ navigate, Enter confirm, number select, Esc back"
             if digit_buffer:
@@ -201,6 +226,15 @@ class BLogger:
             return None
 
         return None
+
+    def get_sorted_logs(self):
+        return sorted(self.logs, key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
+
+    def format_log_label(self, log: dict) -> str:
+        return (
+            f"{log['timestamp']} {log['ticket']} - {log['hours']} hours "
+            f"[Q-> {log['q_status']}] [J-> {log['jira_status']}]"
+        )
 
     def handle_exit(self, signum, frame):
         print("\nExiting B-LOGGER...")
@@ -400,40 +434,343 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Log History" + self.term.normal)
         
-        sorted_logs = sorted(self.logs, key=lambda x: datetime.strptime(x['timestamp'].split()[0], "%d.%m.%Y"))
-        
+        for line in self.build_log_view_lines(self.get_sorted_logs()):
+            print(line["text"])
+
+    def build_log_view_lines(self, sorted_logs, selected_index: Optional[int] = None):
+        """Build display rows for logs, separated by date with day totals."""
+        lines = []
         current_date = None
         day_total_minutes = 0
-        
+
+        def flush_day_total(date_str: str, minutes: int) -> None:
+            total_hours = self.format_hours(minutes)
+            if total_hours:
+                color = self.term.green if minutes == 480 else self.term.red
+                lines.append({"kind": "meta", "log_index": None, "text": ""})
+                lines.append({
+                    "kind": "meta",
+                    "log_index": None,
+                    "text": f"Total for {date_str}: {color(total_hours)}",
+                })
+                lines.append({"kind": "meta", "log_index": None, "text": "-" * 72})
+            lines.append({"kind": "meta", "log_index": None, "text": "-" * 72})
+
         for i, log in enumerate(sorted_logs):
             log_date = log['timestamp'].split()[0]
-            
+
             if current_date is not None and log_date != current_date:
-                total_hours = self.format_hours(day_total_minutes)
-                if total_hours:
-                    if day_total_minutes == 480:  # 8 hours = 480 minutes
-                        print(f"\nTotal for {current_date}: {self.term.green(total_hours)}")
-                    else:
-                        print(f"\nTotal for {current_date}: {self.term.red(total_hours)}")
-                    print("-" * 72)
-                print("-" * 72)
+                flush_day_total(current_date, day_total_minutes)
                 day_total_minutes = 0
-            
+
             current_date = log_date
-            print(f"{i+1}. {log['timestamp']} {log['ticket']} - {log['hours']} hours [Q-> {log['q_status']}] [J-> {log['jira_status']}]")
-            if log['subtasks']:
-                for subtask in log['subtasks']:
-                    print(f"   └─ {subtask}")
-            
-            day_total_minutes += self.parse_hours(log['hours'])
-        
-        if day_total_minutes > 0:
-            total_hours = self.format_hours(day_total_minutes)
-            if day_total_minutes == 480:  # 8 hours = 480 minutes
-                print(f"\nTotal for {current_date}: {self.term.green(total_hours)}")
+            label = f"{i + 1}. {self.format_log_label(log)}"
+            if selected_index is not None and i == selected_index:
+                text = self.term.black_on_white(f" > {label} ") + self.term.normal
             else:
-                print(f"\nTotal for {current_date}: {self.term.red(total_hours)}")
-            print("-" * 72)
+                text = f"   {label}" if selected_index is not None else label
+            lines.append({"kind": "log", "log_index": i, "text": text})
+
+            if log.get('subtasks'):
+                for subtask in log['subtasks']:
+                    lines.append({
+                        "kind": "meta",
+                        "log_index": i,
+                        "text": f"   └─ {subtask}",
+                    })
+
+            day_total_minutes += self.parse_hours(log['hours'])
+
+        if current_date is not None and day_total_minutes > 0:
+            total_hours = self.format_hours(day_total_minutes)
+            color = self.term.green if day_total_minutes == 480 else self.term.red
+            lines.append({"kind": "meta", "log_index": None, "text": ""})
+            lines.append({
+                "kind": "meta",
+                "log_index": None,
+                "text": f"Total for {current_date}: {color(total_hours)}",
+            })
+            lines.append({"kind": "meta", "log_index": None, "text": "-" * 72})
+
+        return lines
+
+    def view_logs(self):
+        while True:
+            if not self.logs:
+                print(self.term.clear)
+                print(self.term.black_on_white + "View Logs" + self.term.normal)
+                print("\nNo logs found.")
+                self.ask("\nPress Enter to continue...")
+                return
+
+            sorted_logs = self.get_sorted_logs()
+            selected = len(sorted_logs) - 1
+            digit_buffer = ""
+            window_start = 0
+
+            def selected_line_index(lines) -> int:
+                for idx, line in enumerate(lines):
+                    if line["kind"] == "log" and line["log_index"] == selected:
+                        return idx
+                return 0
+
+            def visible_capacity() -> int:
+                # title, blank, hint, scroll indicators, padding
+                return max(5, self.term.height - 6)
+
+            def ensure_visible(lines) -> None:
+                nonlocal window_start
+                capacity = visible_capacity()
+                focus = selected_line_index(lines)
+                if focus < window_start:
+                    window_start = focus
+                elif focus >= window_start + capacity:
+                    window_start = focus - capacity + 1
+                # On the last log, pin to bottom so day totals aren't hidden below
+                if selected == len(sorted_logs) - 1:
+                    window_start = max(0, len(lines) - capacity)
+                max_start = max(0, len(lines) - capacity)
+                window_start = max(0, min(window_start, max_start))
+
+            def render() -> None:
+                nonlocal window_start
+                lines = self.build_log_view_lines(sorted_logs, selected)
+                ensure_visible(lines)
+                capacity = visible_capacity()
+                window_end = min(len(lines), window_start + capacity)
+                logs_above = sum(1 for line in lines[:window_start] if line["kind"] == "log")
+                logs_below = sum(1 for line in lines[window_end:] if line["kind"] == "log")
+
+                print(self.term.clear + self.term.home, end="")
+                print(self.term.black_on_white + "View Logs" + self.term.normal)
+                print()
+                if logs_above > 0:
+                    print(self.term.dim + f"   ↑ {logs_above} more" + self.term.normal)
+                for line in lines[window_start:window_end]:
+                    print(line["text"])
+                if logs_below > 0:
+                    print(self.term.dim + f"   ↓ {logs_below} more" + self.term.normal)
+                print()
+                hint = "↑/↓ navigate, Enter edit/delete, number jump, Esc back"
+                if digit_buffer:
+                    hint += f"  [{digit_buffer}]"
+                print(self.term.dim + hint + self.term.normal)
+                sys.stdout.flush()
+
+            choice = None
+            try:
+                with self.term.cbreak(), self.term.hidden_cursor():
+                    while True:
+                        render()
+                        timeout = 0.5 if digit_buffer else None
+                        key = self.term.inkey(timeout=timeout)
+
+                        if not key:
+                            if digit_buffer.isdigit():
+                                jump = int(digit_buffer) - 1
+                                if 0 <= jump < len(sorted_logs):
+                                    choice = jump
+                                    break
+                            digit_buffer = ""
+                            continue
+
+                        if key.name == "KEY_ESCAPE" or key == "0":
+                            choice = None
+                            break
+
+                        if key.name == "KEY_UP":
+                            digit_buffer = ""
+                            selected = (selected - 1) % len(sorted_logs)
+                            continue
+
+                        if key.name == "KEY_DOWN":
+                            digit_buffer = ""
+                            selected = (selected + 1) % len(sorted_logs)
+                            continue
+
+                        if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
+                            if digit_buffer.isdigit():
+                                jump = int(digit_buffer) - 1
+                                if 0 <= jump < len(sorted_logs):
+                                    choice = jump
+                                    break
+                            choice = selected
+                            break
+
+                        if key.name in ("KEY_BACKSPACE", "KEY_DELETE") or key in ("\x7f", "\b"):
+                            digit_buffer = digit_buffer[:-1]
+                            continue
+
+                        if key.isdigit():
+                            candidate = digit_buffer + str(key)
+                            jump = int(candidate) - 1
+                            if jump + 1 > len(sorted_logs) and len(candidate) > 1:
+                                candidate = str(key)
+                                jump = int(candidate) - 1
+                            if jump + 1 > len(sorted_logs):
+                                digit_buffer = ""
+                                continue
+                            digit_buffer = candidate
+                            if 0 <= jump < len(sorted_logs):
+                                selected = jump
+                            continue
+            except KeyboardInterrupt:
+                return
+
+            if choice is None:
+                return
+
+            log = sorted_logs[choice]
+            action = self.select_menu(
+                f"Log {choice + 1}",
+                [
+                    ("1", "Edit"),
+                    ("2", "Delete"),
+                    ("3", "Mark as checked"),
+                    ("4", "Mark as unchecked"),
+                    ("5", "Mark all day as checked"),
+                    ("6", "Mark all day as unchecked"),
+                    ("0", "Back"),
+                ],
+                preamble=self.format_log_label(log),
+            )
+            if action in (None, "0"):
+                continue
+            if action == "1":
+                self.edit_log_entry(log, choice + 1)
+            elif action == "2":
+                self.delete_log_entry(log, choice + 1)
+            elif action == "3":
+                self.mark_log_entry(log, choice + 1, checked=True)
+            elif action == "4":
+                self.mark_log_entry(log, choice + 1, checked=False)
+            elif action == "5":
+                self.mark_day_for_log(log, checked=True)
+            elif action == "6":
+                self.mark_day_for_log(log, checked=False)
+
+    def edit_log_entry(self, log: dict, display_number: Optional[int] = None):
+        label = f"Editing Log {display_number}" if display_number else "Editing Log"
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + label + self.term.normal)
+        print(f"\nCurrent: {self.format_log_label(log)}")
+        self.current_log = log
+
+        edit_date = self.ask("\nDo you want to edit the date? (y/n): ").lower()
+        if edit_date == 'y':
+            current_date = self.current_log['timestamp'].split()[0]
+            print(f"Current date: {current_date}")
+            while True:
+                new_date = self.ask("Enter new date (DD.MM.YYYY) or leave empty to cancel: ").strip()
+                if not new_date:
+                    break
+                try:
+                    datetime.strptime(new_date, "%d.%m.%Y")
+                    time_part = (
+                        self.current_log['timestamp'].split()[1]
+                        if len(self.current_log['timestamp'].split()) > 1
+                        else datetime.now().strftime('%H:%M:%S')
+                    )
+                    self.current_log["timestamp"] = f"{new_date} {time_part}"
+                    break
+                except ValueError:
+                    print("Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)")
+
+        edit_desc = self.ask("Do you want to edit the description? (y/n): ").lower()
+        if edit_desc == 'y':
+            print(f"\nCurrent description: {self.current_log['ticket']}")
+            new_desc = self.ask("Enter new description: ")
+            if new_desc.strip():
+                self.current_log["ticket"] = new_desc
+
+        self.update_status()
+        self.save_logs()
+        print("\nLog updated successfully!")
+        self.ask("\nPress Enter to continue...")
+
+    def delete_log_entry(self, log: dict, display_number: Optional[int] = None):
+        label = f"log {display_number}" if display_number else "this log"
+        confirm = self.ask(f"Are you sure you want to delete {label}? (y/n): ").lower()
+        if confirm != 'y':
+            return False
+
+        try:
+            self.logs.remove(log)
+        except ValueError:
+            print("Log not found.")
+            self.ask("\nPress Enter to continue...")
+            return False
+
+        print(f"Deleted log: {log['ticket']} - {log['hours']} hours")
+        self.save_logs()
+        self.ask("\nPress Enter to continue...")
+        return True
+
+    def ask_status_choice(self) -> Optional[str]:
+        while True:
+            status_choice = self.ask(
+                "\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): "
+            ).lower()
+            if status_choice == '0':
+                return None
+            if status_choice in ['q', 'j', 'b']:
+                return status_choice
+            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+
+    def apply_status_choice(self, log: dict, status_choice: str, checked: bool) -> list[str]:
+        mark = "✅" if checked else "❌"
+        updated = []
+        if status_choice in ['q', 'b']:
+            log["q_status"] = mark
+            updated.append("Q")
+        if status_choice in ['j', 'b']:
+            log["jira_status"] = mark
+            updated.append("Jira")
+        return updated
+
+    def mark_log_entry(self, log: dict, display_number: Optional[int] = None, *, checked: bool = True):
+        action = "checked" if checked else "unchecked"
+        label = f"Log {display_number}" if display_number else "Log"
+        print(self.term.clear)
+        print(self.term.move_y(0) + self.term.black_on_white + f"Mark {label} as {action.title()}" + self.term.normal)
+        print(f"\n{self.format_log_label(log)}")
+
+        status_choice = self.ask_status_choice()
+        if status_choice is None:
+            return
+
+        updated = self.apply_status_choice(log, status_choice, checked)
+        print(f"\nMarked log{f' {display_number}' if display_number else ''} as {action} for {', '.join(updated)}.")
+        self.save_logs()
+        self.ask("\nPress Enter to continue...")
+
+    def mark_day_for_log(self, log: dict, *, checked: bool = True):
+        action = "checked" if checked else "unchecked"
+        date_str = log['timestamp'].split()[0]
+        print(self.term.clear)
+        print(
+            self.term.move_y(0)
+            + self.term.black_on_white
+            + f"Mark All Day as {action.title()}"
+            + self.term.normal
+        )
+        print(f"\nDate: {date_str}")
+
+        status_choice = self.ask_status_choice()
+        if status_choice is None:
+            return
+
+        count = 0
+        updated = []
+        for day_log in self.logs:
+            if day_log['timestamp'].split()[0] == date_str:
+                updated = self.apply_status_choice(day_log, status_choice, checked)
+                count += 1
+
+        print(f"\nMarked {count} log(s) as {action} for {date_str} ({', '.join(updated)}).")
+        if count > 0:
+            self.save_logs()
+        self.ask("\nPress Enter to continue...")
 
     def edit_log(self):
         print(self.term.clear)
@@ -443,24 +780,13 @@ class BLogger:
             log_index = int(self.ask("\nEnter log number to edit (0 to exit): ")) - 1
             if log_index == -1:
                 return
-            
-            if 0 <= log_index < len(self.logs):
-                print(self.term.clear)
-                print(self.term.move_y(0) + self.term.black_on_white + f"Editing Log {log_index + 1}" + self.term.normal)
-                self.current_log = self.logs[log_index]
-                
-                edit_desc = self.ask("Do you want to edit the description? (y/n): ").lower()
-                if edit_desc == 'y':
-                    print(f"\nCurrent description: {self.current_log['ticket']}")
-                    new_desc = self.ask("Enter new description: ")
-                    if new_desc.strip():
-                        self.current_log["ticket"] = new_desc
-                
-                self.update_status()
-                self.logs[log_index] = self.current_log
-                self.save_logs()
+
+            sorted_logs = self.get_sorted_logs()
+            if 0 <= log_index < len(sorted_logs):
+                self.edit_log_entry(sorted_logs[log_index], log_index + 1)
         except ValueError:
             print("Invalid input")
+            self.ask("\nPress Enter to continue...")
 
     def delete_log(self):
         print(self.term.clear)
@@ -469,14 +795,10 @@ class BLogger:
             log_index = int(self.ask("Enter log number to delete (0 to exit): ")) - 1
             if log_index == -1:
                 return
-            
-            if 0 <= log_index < len(self.logs):
-                confirm = self.ask(f"Are you sure you want to delete log {log_index + 1}? (y/n): ").lower()
-                if confirm == 'y':
-                    deleted_log = self.logs.pop(log_index)
-                    print(f"Deleted log: {deleted_log['ticket']} - {deleted_log['hours']} hours")
-                    self.save_logs()
-                    self.ask("\nPress Enter to continue...")
+
+            sorted_logs = self.get_sorted_logs()
+            if 0 <= log_index < len(sorted_logs):
+                self.delete_log_entry(sorted_logs[log_index], log_index + 1)
         except ValueError:
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
@@ -1883,8 +2205,7 @@ class BLogger:
                         elif subchoice == "1":
                             self.create_new_log()
                         elif subchoice == "2":
-                            self.display_logs()
-                            self.ask("\nPress Enter to continue...")
+                            self.view_logs()
                         elif subchoice == "3":
                             self.edit_log()
                         elif subchoice == "4":
