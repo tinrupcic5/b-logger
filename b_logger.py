@@ -107,6 +107,105 @@ class BLogger:
     def ask(self, text: str) -> str:
         return input(text)
 
+    def _split_prompt(self, prompt: str) -> tuple[str, str]:
+        leading = ""
+        text = prompt
+        while text.startswith("\n"):
+            leading += "\n"
+            text = text[1:]
+        text = text.strip()
+        for suffix in ("(y/n):", "(y/n)", ":"):
+            if text.endswith(suffix):
+                text = text[: -len(suffix)].rstrip()
+                break
+        return leading, text
+
+    def ask_choice(
+        self,
+        prompt: str,
+        options: list[str],
+        *,
+        default_index: int = 0,
+        cancel_index: Optional[int] = 0,
+    ) -> Optional[int]:
+        """Pick one option with left/right. Enter confirms. The first option starts selected.
+
+        Esc selects cancel_index when it is set, otherwise it cancels and returns None.
+        """
+        if not options:
+            return None
+
+        selected = max(0, min(default_index, len(options) - 1))
+        leading, text = self._split_prompt(prompt)
+        if leading:
+            sys.stdout.write(leading)
+        print(text)
+        sys.stdout.flush()
+
+        def paint(final: bool = False) -> None:
+            chunks = ["  "]
+            for i, label in enumerate(options):
+                token = f" {label} "
+                if i == selected:
+                    chunks.append(self.term.black_on_white(token))
+                else:
+                    chunks.append(token)
+                chunks.append(" ")
+            if not final:
+                hint = "  ←/→  Enter"
+                if cancel_index is None:
+                    hint += "  Esc"
+                chunks.append(self.term.dim + hint + self.term.normal)
+            sys.stdout.write("\r" + self.term.clear_eol + "".join(chunks))
+            sys.stdout.flush()
+
+        def finish(index: Optional[int]) -> Optional[int]:
+            if index is not None:
+                nonlocal selected
+                selected = index
+            paint(final=True)
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            return index
+
+        try:
+            with self.term.cbreak(), self.term.hidden_cursor():
+                while True:
+                    paint()
+                    key = self.term.inkey()
+                    if not key:
+                        continue
+                    if key.name == "KEY_LEFT" or key.code == self.term.KEY_LEFT:
+                        selected = (selected - 1) % len(options)
+                        continue
+                    if key.name == "KEY_RIGHT" or key.code == self.term.KEY_RIGHT:
+                        selected = (selected + 1) % len(options)
+                        continue
+                    if key.name == "KEY_ESCAPE":
+                        return finish(cancel_index)
+                    if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
+                        return finish(selected)
+        except KeyboardInterrupt:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            return cancel_index
+
+        return cancel_index
+
+    def ask_yes_no(self, prompt: str) -> bool:
+        choice = self.ask_choice(prompt, ["No", "Yes"], default_index=0, cancel_index=0)
+        return choice == 1
+
+    def ask_done_status(self, prompt: str, *, allow_keep: bool = False) -> Optional[str]:
+        """Return 'c' for done, 'x' for not done, or None to keep the current value."""
+        if allow_keep:
+            choice = self.ask_choice(prompt, ["Keep", "❌", "✅"], default_index=0, cancel_index=0)
+            if choice in (None, 0):
+                return None
+            return "x" if choice == 1 else "c"
+        choice = self.ask_choice(prompt, ["❌", "✅"], default_index=0, cancel_index=0)
+        return "c" if choice == 1 else "x"
+
     def select_menu(
         self,
         title: str,
@@ -274,15 +373,7 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Create New Log" + self.term.normal)
         
-        while True:
-            use_custom_date = self.ask("Do you want to use a different date? (y/n): ").lower()
-            if use_custom_date in ['0', 'exit']:
-                return
-            if use_custom_date in ['y', 'n']:
-                break
-            print("Invalid choice. Please enter 'y', 'n', '0', or 'exit'")
-        
-        if use_custom_date == 'y':
+        if self.ask_yes_no("Do you want to use a different date?"):
             while True:
                 try:
                     custom_date = self.ask("Enter date (DD.MM.YYYY) or 0/exit to cancel: ")
@@ -343,8 +434,7 @@ class BLogger:
         print(self.term.clear)
         print(f"Current log: {self.current_log['ticket']} - {self.current_log['hours']} hours")
         
-        update_hours = self.ask("Do you want to update hours? (y/n): ").lower()
-        if update_hours == 'y':
+        if self.ask_yes_no("Do you want to update hours?"):
             log_date = self.current_log["timestamp"].split()[0]
             day_total_minutes = sum(
                 self.parse_hours(log.get('hours', ''))
@@ -372,15 +462,14 @@ class BLogger:
             )
             self.current_log["hours"] = new_hours
         
-        q_status = self.ask("Update Q log status (x for ❌, c for ✅): ").lower()
-        jira_status = self.ask("Update Jira log status (x for ❌, c for ✅): ").lower()
+        q_status = self.ask_done_status("Update Q log status")
+        jira_status = self.ask_done_status("Update Jira log status")
         
         self.current_log["q_status"] = "✅" if q_status == "c" else "❌"
         self.current_log["jira_status"] = "✅" if jira_status == "c" else "❌"
         
         while True:
-            subtask = self.ask("Add subtask? (y/n): ").lower()
-            if subtask != "y":
+            if not self.ask_yes_no("Add subtask?"):
                 break
                 
             subtask_desc = self.ask("Enter subtask description: ")
@@ -656,8 +745,7 @@ class BLogger:
         print(f"\nCurrent: {self.format_log_label(log)}")
         self.current_log = log
 
-        edit_date = self.ask("\nDo you want to edit the date? (y/n): ").lower()
-        if edit_date == 'y':
+        if self.ask_yes_no("\nDo you want to edit the date?"):
             current_date = self.current_log['timestamp'].split()[0]
             print(f"Current date: {current_date}")
             while True:
@@ -676,8 +764,7 @@ class BLogger:
                 except ValueError:
                     print("Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)")
 
-        edit_desc = self.ask("Do you want to edit the description? (y/n): ").lower()
-        if edit_desc == 'y':
+        if self.ask_yes_no("Do you want to edit the description?"):
             print(f"\nCurrent description: {self.current_log['ticket']}")
             new_desc = self.ask("Enter new description: ")
             if new_desc.strip():
@@ -690,8 +777,7 @@ class BLogger:
 
     def delete_log_entry(self, log: dict, display_number: Optional[int] = None):
         label = f"log {display_number}" if display_number else "this log"
-        confirm = self.ask(f"Are you sure you want to delete {label}? (y/n): ").lower()
-        if confirm != 'y':
+        if not self.ask_yes_no(f"Are you sure you want to delete {label}?"):
             return False
 
         try:
@@ -707,15 +793,15 @@ class BLogger:
         return True
 
     def ask_status_choice(self) -> Optional[str]:
-        while True:
-            status_choice = self.ask(
-                "\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): "
-            ).lower()
-            if status_choice == '0':
-                return None
-            if status_choice in ['q', 'j', 'b']:
-                return status_choice
-            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+        choice = self.ask_choice(
+            "\nWhich status do you want to update?",
+            ["Q", "Jira", "Both"],
+            default_index=0,
+            cancel_index=None,
+        )
+        if choice is None:
+            return None
+        return ("q", "j", "b")[choice]
 
     def apply_status_choice(self, log: dict, status_choice: str, checked: bool) -> list[str]:
         mark = "✅" if checked else "❌"
@@ -875,6 +961,8 @@ class BLogger:
         print("\n" + self.term.underline + "Keyboard Navigation:" + self.term.normal)
         print("- Use ↑/↓ arrow keys to move through menu options")
         print("- Press Enter to select the highlighted option")
+        print("- Yes/No and status questions: ←/→ to move, Enter to confirm")
+        print("- No is selected by default on Yes/No questions")
         print("- Press a number to jump to / select that option")
         print("- Press Esc to cancel / go back")
         print("- Use arrow keys to navigate through input history")
@@ -920,13 +1008,9 @@ class BLogger:
         print(self.term.move_y(0) + self.term.black_on_white + "Mark Log as Checked" + self.term.normal)
         self.display_logs()
         
-        while True:
-            status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
-            if status_choice == '0':
-                return
-            if status_choice in ['q', 'j', 'b']:
-                break
-            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+        status_choice = self.ask_status_choice()
+        if status_choice is None:
+            return
         
         try:
             log_index = int(self.ask("\nEnter log number to mark as checked (0 to exit): ")) - 1
@@ -948,15 +1032,8 @@ class BLogger:
                 print(f"\nMarked log {log_index + 1} as checked for {', '.join(status_updated)}.")
                 self.save_logs()
                 
-                while True:
-                    another = self.ask("\nDo you want to mark another log as checked? (y/n): ").lower()
-                    if another == 'y':
-                        self.mark_as_checked()
-                        break
-                    elif another == 'n':
-                        break
-                    else:
-                        print("Please enter 'y' or 'n'")
+                if self.ask_yes_no("\nDo you want to mark another log as checked?"):
+                    self.mark_as_checked()
         except ValueError:
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
@@ -966,13 +1043,9 @@ class BLogger:
         print(self.term.move_y(0) + self.term.black_on_white + "Mark Log as Unchecked" + self.term.normal)
         self.display_logs()
         
-        while True:
-            status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
-            if status_choice == '0':
-                return
-            if status_choice in ['q', 'j', 'b']:
-                break
-            print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+        status_choice = self.ask_status_choice()
+        if status_choice is None:
+            return
         
         try:
             log_index = int(self.ask("\nEnter log number to mark as unchecked (0 to exit): ")) - 1
@@ -994,15 +1067,8 @@ class BLogger:
                 print(f"\nMarked log {log_index + 1} as unchecked for {', '.join(status_updated)}.")
                 self.save_logs()
                 
-                while True:
-                    another = self.ask("\nDo you want to mark another log as unchecked? (y/n): ").lower()
-                    if another == 'y':
-                        self.mark_as_unchecked()
-                        break
-                    elif another == 'n':
-                        break
-                    else:
-                        print("Please enter 'y' or 'n'")
+                if self.ask_yes_no("\nDo you want to mark another log as unchecked?"):
+                    self.mark_as_unchecked()
         except ValueError:
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
@@ -1012,13 +1078,9 @@ class BLogger:
             print(self.term.clear)
             print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Checked" + self.term.normal)
 
-            while True:
-                status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
-                if status_choice == '0':
-                    return
-                if status_choice in ['q', 'j', 'b']:
-                    break
-                print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+            status_choice = self.ask_status_choice()
+            if status_choice is None:
+                return
 
             dates_with_logs = sorted(
                 set(log['timestamp'].split()[0] for log in self.logs),
@@ -1067,26 +1129,17 @@ class BLogger:
             if count > 0:
                 self.save_logs()
 
-            while True:
-                again = self.ask("\nDo you want to do it for another date? (y/n): ").lower()
-                if again == 'n':
-                    return
-                if again == 'y':
-                    break
-                print("Unesi 'y' ili 'n'.")
+            if not self.ask_yes_no("\nDo you want to do it for another date?"):
+                return
 
     def mark_all_day_as_unchecked(self):
         while True:
             print(self.term.clear)
             print(self.term.move_y(0) + self.term.black_on_white + "Mark All Day as Unchecked" + self.term.normal)
 
-            while True:
-                status_choice = self.ask("\nWhich status do you want to update? (q/j/b for Q/Jira/Both, 0 to exit): ").lower()
-                if status_choice == '0':
-                    return
-                if status_choice in ['q', 'j', 'b']:
-                    break
-                print("Invalid choice. Please enter 'q' for Q, 'j' for Jira, 'b' for Both, or '0' to exit.")
+            status_choice = self.ask_status_choice()
+            if status_choice is None:
+                return
 
             dates_with_logs = sorted(
                 set(log['timestamp'].split()[0] for log in self.logs),
@@ -1135,13 +1188,8 @@ class BLogger:
             if count > 0:
                 self.save_logs()
 
-            while True:
-                again = self.ask("\nDo you want to do it for another date? (y/n): ").lower()
-                if again == 'n':
-                    return
-                if again == 'y':
-                    break
-                print("Unesi 'y' ili 'n'.")
+            if not self.ask_yes_no("\nDo you want to do it for another date?"):
+                return
 
     def edit_subtasks(self):
         print(self.term.clear)
@@ -1164,21 +1212,21 @@ class BLogger:
                     print(f"{i}. {subtask}")
                 
                 while True:
-                    print("\nOptions:")
-                    print("1. Edit subtask")
-                    print("2. Delete subtask")
-                    print("0. Return to main menu")
+                    option = self.ask_choice(
+                        "\nWhat do you want to do?",
+                        ["Back", "Edit subtask", "Delete subtask"],
+                        default_index=0,
+                        cancel_index=0,
+                    )
                     
-                    option = self.ask("\nEnter your choice (0-2): ").strip()
-                    
-                    if option == "0":
+                    if option in (None, 0):
                         break
-                    elif option in ["1", "2"]:
+                    if option in (1, 2):
                         subtask_input = self.ask("\nEnter subtask number: ").strip()
                         try:
                             subtask_index = int(subtask_input) - 1
                             if 0 <= subtask_index < len(log['subtasks']):
-                                if option == "1":
+                                if option == 1:
                                     print(f"\nCurrent subtask: {log['subtasks'][subtask_index]}")
                                     new_subtask = self.ask("Enter new subtask description: ")
                                     if new_subtask.strip():
@@ -1197,8 +1245,6 @@ class BLogger:
                                 print("Invalid subtask number!")
                         except ValueError:
                             print("Please enter a valid number!")
-                    else:
-                        print("Invalid option. Please enter 0, 1, or 2.")
                 
                 self.save_logs()
                 print("\nChanges saved successfully!")
@@ -1652,23 +1698,9 @@ class BLogger:
             self.ask("\nPress Enter to continue...")
             return
         
-        while True:
-            demo_status = self.ask("Update Demo status (x for ❌, c for ✅): ").lower()
-            if demo_status in ['x', 'c']:
-                break
-            print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
-        
-        while True:
-            stage_status = self.ask("Update Stage status (x for ❌, c for ✅): ").lower()
-            if stage_status in ['x', 'c']:
-                break
-            print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
-        
-        while True:
-            release_status = self.ask("Update Release notes status (x for ❌, c for ✅): ").lower()
-            if release_status in ['x', 'c']:
-                break
-            print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
+        demo_status = self.ask_done_status("Update Demo status")
+        stage_status = self.ask_done_status("Update Stage status")
+        release_status = self.ask_done_status("Update Release notes status")
         
         current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         
@@ -1773,34 +1805,25 @@ class BLogger:
                         print("Script cannot be empty, keeping current script.")
                 
                 print(f"\nCurrent Demo status: {script.get('demo_status', '❌')}")
-                while True:
-                    demo_status = self.ask("Update Demo status (x for ❌, c for ✅, Enter to keep current): ").lower()
-                    if not demo_status:
-                        break
-                    if demo_status in ['x', 'c']:
-                        script['demo_status'] = "✅" if demo_status == "c" else "❌"
-                        break
-                    print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
+                demo_status = self.ask_done_status("Update Demo status", allow_keep=True)
+                if demo_status == "c":
+                    script['demo_status'] = "✅"
+                elif demo_status == "x":
+                    script['demo_status'] = "❌"
                 
                 print(f"\nCurrent Stage status: {script.get('stage_status', '❌')}")
-                while True:
-                    stage_status = self.ask("Update Stage status (x for ❌, c for ✅, Enter to keep current): ").lower()
-                    if not stage_status:
-                        break
-                    if stage_status in ['x', 'c']:
-                        script['stage_status'] = "✅" if stage_status == "c" else "❌"
-                        break
-                    print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
+                stage_status = self.ask_done_status("Update Stage status", allow_keep=True)
+                if stage_status == "c":
+                    script['stage_status'] = "✅"
+                elif stage_status == "x":
+                    script['stage_status'] = "❌"
                 
                 print(f"\nCurrent Release notes status: {script.get('release_status', '❌')}")
-                while True:
-                    release_status = self.ask("Update Release notes status (x for ❌, c for ✅, Enter to keep current): ").lower()
-                    if not release_status:
-                        break
-                    if release_status in ['x', 'c']:
-                        script['release_status'] = "✅" if release_status == "c" else "❌"
-                        break
-                    print("Invalid choice. Please enter 'x' for ❌ or 'c' for ✅")
+                release_status = self.ask_done_status("Update Release notes status", allow_keep=True)
+                if release_status == "c":
+                    script['release_status'] = "✅"
+                elif release_status == "x":
+                    script['release_status'] = "❌"
                 
                 self.scripts[script_index] = script
                 self.save_scripts()
@@ -1839,8 +1862,7 @@ class BLogger:
                 return
             
             if 0 <= script_index < len(self.scripts):
-                confirm = self.ask(f"Are you sure you want to delete script {script_index + 1}? (y/n): ").lower()
-                if confirm == 'y':
+                if self.ask_yes_no(f"Are you sure you want to delete script {script_index + 1}?"):
                     deleted_script = self.scripts.pop(script_index)
                     print(f"Deleted script: {deleted_script['ticket']}")
                     self.save_scripts()
