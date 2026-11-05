@@ -107,6 +107,303 @@ class BLogger:
     def ask(self, text: str) -> str:
         return input(text)
 
+    def unique_tickets_newest_first(self) -> list[str]:
+        seen = set()
+        tickets = []
+        for log in reversed(self.logs):
+            ticket = str(log.get("ticket", "")).strip()
+            if not ticket or ticket in seen:
+                continue
+            seen.add(ticket)
+            tickets.append(ticket)
+        return tickets
+
+    def matching_qi_tickets(self, query: str, catalog: Optional[list[str]] = None) -> list[str]:
+        """Existing QI logs whose text starts with query.
+
+        Nothing is offered until the query looks like QI- plus a digit, so a bare
+        "QI-" does not dump every ticket.
+        """
+        folded = query.strip().casefold()
+        if len(folded) < 4 or not folded.startswith("qi-") or not folded[3].isdigit():
+            return []
+        source = catalog if catalog is not None else self.unique_tickets_newest_first()
+        return [ticket for ticket in source if ticket.casefold().startswith(folded)]
+
+    def _clip_text(self, text: str, width: int) -> str:
+        if width <= 0:
+            return ""
+        if len(text) <= width:
+            return text
+        if width == 1:
+            return "…"
+        return text[: width - 1] + "…"
+
+    def ask_ticket(self, prompt: str, *, heading: str = "", note: str = "") -> str:
+        """Read a log line. QI- prefixes offer existing logs; ↑/↓ picks one, Enter writes it."""
+        catalog = [
+            ticket
+            for ticket in self.unique_tickets_newest_first()
+            if ticket.casefold().startswith("qi-")
+        ]
+        buffer = ""
+        cursor = 0
+        selected = 0
+        matches: list[str] = []
+
+        def refresh_matches() -> None:
+            nonlocal matches, selected
+            matches = self.matching_qi_tickets(buffer, catalog)
+            if selected >= len(matches):
+                selected = 0
+
+        def render(committed: Optional[str] = None) -> None:
+            width = max(20, self.term.width or 80)
+            text = buffer if committed is None else committed
+            text_cursor = cursor if committed is None else len(text)
+            show_matches = committed is None and bool(matches)
+
+            parts = [self.term.clear, self.term.home]
+            row = 0
+            if heading:
+                parts.append(self.term.black_on_white + heading + self.term.normal + "\n")
+                row += 1
+            if note:
+                parts.append(note + "\n")
+                row += 1
+            parts.append("\n")
+            row += 1
+            input_row = row
+
+            room = max(1, width - len(prompt) - 1)
+            view_start = 0 if text_cursor <= room else text_cursor - room
+            visible = text[view_start:view_start + room]
+            column = min(width - 1, len(prompt) + (text_cursor - view_start))
+            parts.append(prompt + visible + self.term.clear_eol)
+
+            if show_matches:
+                height = self.term.height or 24
+                below = max(0, height - input_row - 1)
+                if below >= 2:
+                    capacity = min(8, below - 1)
+                    show_hint = True
+                else:
+                    capacity = min(1, below)
+                    show_hint = False
+                if capacity > 0:
+                    start = 0 if selected < capacity else selected - capacity + 1
+                    end = min(len(matches), start + capacity)
+                    for index in range(start, end):
+                        label = self._clip_text(matches[index], max(1, width - 4))
+                        marker = ">" if index == selected else " "
+                        line = f" {marker} {label}"
+                        if index == selected:
+                            line = self.term.black_on_white(line)
+                        else:
+                            line = self.term.cyan(line)
+                        parts.append("\n" + line + self.term.clear_eol)
+                    if show_hint:
+                        hint = f"  ↑/↓ select, Enter confirm  {selected + 1}/{len(matches)}"
+                        parts.append(
+                            "\n"
+                            + self.term.dim
+                            + self._clip_text(hint, max(1, width - 1))
+                            + self.term.normal
+                            + self.term.clear_eol
+                        )
+
+            if committed is None:
+                parts.append(str(self.term.move_yx(input_row, column)))
+            else:
+                parts.append("\n")
+            sys.stdout.write("".join(parts))
+            sys.stdout.flush()
+
+        def insert_text(chunk: str) -> None:
+            nonlocal buffer, cursor, selected
+            buffer = buffer[:cursor] + chunk + buffer[cursor:]
+            cursor += len(chunk)
+            selected = 0
+            refresh_matches()
+
+        def delete_backward() -> None:
+            nonlocal buffer, cursor, selected
+            if cursor <= 0:
+                return
+            buffer = buffer[: cursor - 1] + buffer[cursor:]
+            cursor -= 1
+            selected = 0
+            refresh_matches()
+
+        def delete_forward() -> None:
+            nonlocal buffer, cursor, selected
+            if cursor >= len(buffer):
+                return
+            buffer = buffer[:cursor] + buffer[cursor + 1 :]
+            selected = 0
+            refresh_matches()
+
+        def pending_keys() -> list:
+            found = []
+            while True:
+                nxt = self.term.inkey(timeout=0)
+                if not nxt:
+                    return found
+                found.append(nxt)
+
+        def first_pasted_line(text: str) -> str:
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+            return text.split("\n", 1)[0]
+
+        def pasted_text(keys) -> Optional[str]:
+            """Text from a paste burst. None when this is ordinary typing.
+
+            A trailing newline is part of the paste, not an Enter confirm, so the
+            suggestion list stays up until the user picks one.
+            """
+            raw = "".join(str(item) for item in keys)
+            if "\x1b[200~" in raw:
+                chunks = []
+                rest = raw
+                while "\x1b[200~" in rest:
+                    _, _, rest = rest.partition("\x1b[200~")
+                    chunk, found, rest = rest.partition("\x1b[201~")
+                    chunks.append(chunk if found else rest)
+                    if not found:
+                        break
+                return first_pasted_line("".join(chunks)).rstrip()
+
+            if len(keys) < 2:
+                return None
+            for item in keys:
+                if item.is_sequence and str(item) not in ("\r", "\n"):
+                    return None
+            text = "".join(str(item) for item in keys if str(item) not in ("\r", "\n"))
+            if len(text) < 2:
+                return None
+            return first_pasted_line(text).rstrip()
+
+        def handle_key(key) -> Optional[str]:
+            nonlocal buffer, cursor, selected
+            if key.name == "KEY_ESCAPE":
+                render(committed="")
+                return "0"
+
+            if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
+                chosen = matches[selected] if matches else buffer
+                render(committed=chosen)
+                return chosen
+
+            if key.name == "KEY_UP":
+                if matches and selected > 0:
+                    selected -= 1
+                    render()
+                return None
+
+            if key.name == "KEY_DOWN":
+                if matches and selected < len(matches) - 1:
+                    selected += 1
+                    render()
+                return None
+
+            if key.name == "KEY_LEFT":
+                if cursor > 0:
+                    cursor -= 1
+                    render()
+                return None
+
+            if key.name == "KEY_RIGHT":
+                if cursor < len(buffer):
+                    cursor += 1
+                    render()
+                return None
+
+            if key.name == "KEY_HOME" or key == "\x01":
+                cursor = 0
+                render()
+                return None
+
+            if key.name == "KEY_END" or key == "\x05":
+                cursor = len(buffer)
+                render()
+                return None
+
+            if key.name == "KEY_BACKSPACE" or key in ("\x7f", "\b"):
+                delete_backward()
+                render()
+                return None
+
+            if key.name == "KEY_DELETE":
+                delete_forward()
+                render()
+                return None
+
+            if key == "\x15":  # ctrl-u
+                buffer = ""
+                cursor = 0
+                selected = 0
+                refresh_matches()
+                render()
+                return None
+
+            if key == "\x17":  # ctrl-w
+                if cursor == 0:
+                    return None
+                end = cursor
+                index = cursor
+                while index > 0 and buffer[index - 1].isspace():
+                    index -= 1
+                while index > 0 and not buffer[index - 1].isspace():
+                    index -= 1
+                buffer = buffer[:index] + buffer[end:]
+                cursor = index
+                selected = 0
+                refresh_matches()
+                render()
+                return None
+
+            if key.is_sequence:
+                return None
+
+            text = str(key)
+            if text.isprintable():
+                insert_text(text)
+                render()
+            return None
+
+        sys.stdout.write("\x1b[?2004h")
+        sys.stdout.flush()
+        try:
+            with self.term.cbreak():
+                refresh_matches()
+                render()
+                while True:
+                    key = self.term.inkey()
+                    if not key:
+                        continue
+
+                    batch = [key, *pending_keys()]
+                    pasted = pasted_text(batch)
+                    if pasted is not None:
+                        if pasted:
+                            insert_text(pasted)
+                        render()
+                        continue
+
+                    for item in batch:
+                        done = handle_key(item)
+                        if done is not None:
+                            return done
+        except KeyboardInterrupt:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            raise
+        finally:
+            sys.stdout.write("\x1b[?2004l")
+            sys.stdout.flush()
+
+        return buffer
+
     def _split_prompt(self, prompt: str) -> tuple[str, str]:
         leading = ""
         text = prompt
@@ -388,7 +685,11 @@ class BLogger:
         else:
             current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
-        ticket = self.ask("Enter your log here: ")
+        ticket = self.ask_ticket(
+            "Enter your log here: ",
+            heading="Create New Log",
+            note=current_time.split()[0],
+        )
         if ticket.lower() in ['0', 'exit']:
             return
 
@@ -526,7 +827,40 @@ class BLogger:
         for line in self.build_log_view_lines(self.get_sorted_logs()):
             print(line["text"])
 
-    def build_log_view_lines(self, sorted_logs, selected_index: Optional[int] = None):
+    def log_search_text(self, log: dict) -> str:
+        subtasks = log.get("subtasks") or []
+        parts = [
+            str(log.get("timestamp", "")),
+            str(log.get("ticket", "")),
+            str(log.get("hours", "")),
+            " ".join(str(item) for item in subtasks),
+        ]
+        return " ".join(parts).lower()
+
+    def filter_logs(self, logs, query: str) -> list:
+        needle = query.lower()
+        if not needle:
+            return list(logs)
+        return [log for log in logs if needle in self.log_search_text(log)]
+
+    def highlight_match(self, text: str, query: str) -> str:
+        if not query:
+            return text
+        needle = query.lower()
+        haystack = text.lower()
+        parts = []
+        start = 0
+        while True:
+            index = haystack.find(needle, start)
+            if index < 0:
+                parts.append(text[start:])
+                break
+            parts.append(text[start:index])
+            parts.append(self.term.bold + text[index:index + len(needle)] + self.term.normal)
+            start = index + len(needle)
+        return "".join(parts)
+
+    def build_log_view_lines(self, sorted_logs, selected_index: Optional[int] = None, query: str = ""):
         """Build display rows for logs, separated by date with day totals."""
         lines = []
         current_date = None
@@ -554,7 +888,10 @@ class BLogger:
 
             current_date = log_date
             label = f"{i + 1}. {self.format_log_label(log)}"
-            if selected_index is not None and i == selected_index:
+            selected_row = selected_index is not None and i == selected_index
+            if query and not selected_row:
+                label = self.highlight_match(label, query)
+            if selected_row:
                 text = self.term.black_on_white(f" > {label} ") + self.term.normal
             else:
                 text = f"   {label}" if selected_index is not None else label
@@ -562,10 +899,13 @@ class BLogger:
 
             if log.get('subtasks'):
                 for subtask in log['subtasks']:
+                    sub_text = f"   └─ {subtask}"
+                    if query:
+                        sub_text = self.highlight_match(sub_text, query)
                     lines.append({
                         "kind": "meta",
                         "log_index": i,
-                        "text": f"   └─ {subtask}",
+                        "text": sub_text,
                     })
 
             day_total_minutes += self.parse_hours(log['hours'])
@@ -584,6 +924,9 @@ class BLogger:
         return lines
 
     def view_logs(self):
+        find_query = ""
+        finding = False
+
         while True:
             if not self.logs:
                 print(self.term.clear)
@@ -593,9 +936,30 @@ class BLogger:
                 return
 
             sorted_logs = self.get_sorted_logs()
-            selected = len(sorted_logs) - 1
+            visible_logs = self.filter_logs(sorted_logs, find_query)
+            selected = len(visible_logs) - 1 if visible_logs else 0
             digit_buffer = ""
             window_start = 0
+
+            def refresh_visible() -> None:
+                nonlocal visible_logs, selected, window_start
+                previous = (
+                    visible_logs[selected]
+                    if visible_logs and 0 <= selected < len(visible_logs)
+                    else None
+                )
+                visible_logs = self.filter_logs(sorted_logs, find_query)
+                if not visible_logs:
+                    selected = 0
+                    window_start = 0
+                    return
+                if previous is not None:
+                    for index, log in enumerate(visible_logs):
+                        if log is previous:
+                            selected = index
+                            return
+                selected = len(visible_logs) - 1
+                window_start = 0
 
             def selected_line_index(lines) -> int:
                 for idx, line in enumerate(lines):
@@ -604,8 +968,9 @@ class BLogger:
                 return 0
 
             def visible_capacity() -> int:
-                # title, blank, hint, scroll indicators, padding
-                return max(5, self.term.height - 6)
+                # title, blank, hint, scroll indicators, optional find line, padding
+                extra = 1 if finding else 0
+                return max(5, self.term.height - 6 - extra)
 
             def ensure_visible(lines) -> None:
                 nonlocal window_start
@@ -616,14 +981,19 @@ class BLogger:
                 elif focus >= window_start + capacity:
                     window_start = focus - capacity + 1
                 # On the last log, pin to bottom so day totals aren't hidden below
-                if selected == len(sorted_logs) - 1:
+                if visible_logs and selected == len(visible_logs) - 1:
                     window_start = max(0, len(lines) - capacity)
                 max_start = max(0, len(lines) - capacity)
                 window_start = max(0, min(window_start, max_start))
 
             def render() -> None:
                 nonlocal window_start
-                lines = self.build_log_view_lines(sorted_logs, selected)
+                query = find_query if finding else ""
+                lines = self.build_log_view_lines(
+                    visible_logs,
+                    selected if visible_logs else None,
+                    query,
+                )
                 ensure_visible(lines)
                 capacity = visible_capacity()
                 window_end = min(len(lines), window_start + capacity)
@@ -633,16 +1003,38 @@ class BLogger:
                 print(self.term.clear + self.term.home, end="")
                 print(self.term.black_on_white + "View Logs" + self.term.normal)
                 print()
-                if logs_above > 0:
-                    print(self.term.dim + f"   ↑ {logs_above} more" + self.term.normal)
-                for line in lines[window_start:window_end]:
-                    print(line["text"])
-                if logs_below > 0:
-                    print(self.term.dim + f"   ↓ {logs_below} more" + self.term.normal)
+                if not visible_logs:
+                    print(self.term.dim + "   No matching logs" + self.term.normal)
+                else:
+                    if logs_above > 0:
+                        print(self.term.dim + f"   ↑ {logs_above} more" + self.term.normal)
+                    for line in lines[window_start:window_end]:
+                        print(line["text"])
+                    if logs_below > 0:
+                        print(self.term.dim + f"   ↓ {logs_below} more" + self.term.normal)
                 print()
-                hint = "↑/↓ navigate, Enter edit/delete, number jump, Esc back"
-                if digit_buffer:
-                    hint += f"  [{digit_buffer}]"
+                if finding:
+                    count = len(visible_logs)
+                    if not find_query:
+                        summary = "type to filter"
+                    elif count == 1:
+                        summary = "1 match"
+                    else:
+                        summary = f"{count} matches"
+                    print(
+                        " Find: "
+                        + find_query
+                        + self.term.black_on_white(" ")
+                        + "  "
+                        + self.term.dim
+                        + summary
+                        + self.term.normal
+                    )
+                    hint = "↑/↓ move, Enter open, Backspace delete, Esc clear"
+                else:
+                    hint = "↑/↓ navigate, Enter edit/delete, f find, number jump, Esc back"
+                    if digit_buffer:
+                        hint += f"  [{digit_buffer}]"
                 print(self.term.dim + hint + self.term.normal)
                 sys.stdout.flush()
 
@@ -655,61 +1047,96 @@ class BLogger:
                         key = self.term.inkey(timeout=timeout)
 
                         if not key:
-                            if digit_buffer.isdigit():
+                            if not finding and digit_buffer.isdigit():
                                 jump = int(digit_buffer) - 1
-                                if 0 <= jump < len(sorted_logs):
+                                if 0 <= jump < len(visible_logs):
                                     choice = jump
                                     break
                             digit_buffer = ""
                             continue
 
-                        if key.name == "KEY_ESCAPE" or key == "0":
+                        if key.name == "KEY_ESCAPE":
+                            if finding:
+                                finding = False
+                                find_query = ""
+                                refresh_visible()
+                                continue
+                            choice = None
+                            break
+
+                        if not finding and key == "0":
                             choice = None
                             break
 
                         if key.name == "KEY_UP":
                             digit_buffer = ""
-                            selected = (selected - 1) % len(sorted_logs)
+                            if visible_logs:
+                                selected = (selected - 1) % len(visible_logs)
                             continue
 
                         if key.name == "KEY_DOWN":
                             digit_buffer = ""
-                            selected = (selected + 1) % len(sorted_logs)
+                            if visible_logs:
+                                selected = (selected + 1) % len(visible_logs)
                             continue
 
                         if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
-                            if digit_buffer.isdigit():
+                            if not finding and digit_buffer.isdigit():
                                 jump = int(digit_buffer) - 1
-                                if 0 <= jump < len(sorted_logs):
+                                if 0 <= jump < len(visible_logs):
                                     choice = jump
                                     break
-                            choice = selected
-                            break
-
-                        if key.name in ("KEY_BACKSPACE", "KEY_DELETE") or key in ("\x7f", "\b"):
-                            digit_buffer = digit_buffer[:-1]
+                                digit_buffer = ""
+                                continue
+                            if visible_logs:
+                                choice = selected
+                                break
                             continue
 
-                        if key.isdigit():
+                        if key.name in ("KEY_BACKSPACE", "KEY_DELETE") or key in ("\x7f", "\b"):
+                            if finding:
+                                find_query = find_query[:-1]
+                                refresh_visible()
+                            else:
+                                digit_buffer = digit_buffer[:-1]
+                            continue
+
+                        if (
+                            not finding
+                            and not key.is_sequence
+                            and str(key).lower() == "f"
+                        ):
+                            finding = True
+                            digit_buffer = ""
+                            continue
+
+                        if not finding and key.isdigit():
                             candidate = digit_buffer + str(key)
                             jump = int(candidate) - 1
-                            if jump + 1 > len(sorted_logs) and len(candidate) > 1:
+                            if jump + 1 > len(visible_logs) and len(candidate) > 1:
                                 candidate = str(key)
                                 jump = int(candidate) - 1
-                            if jump + 1 > len(sorted_logs):
+                            if jump + 1 > len(visible_logs):
                                 digit_buffer = ""
                                 continue
                             digit_buffer = candidate
-                            if 0 <= jump < len(sorted_logs):
+                            if 0 <= jump < len(visible_logs):
                                 selected = jump
                             continue
+
+                        if finding and not key.is_sequence:
+                            character = str(key)
+                            if len(character) == 1 and character.isprintable():
+                                find_query += character
+                                digit_buffer = ""
+                                refresh_visible()
             except KeyboardInterrupt:
                 return
 
             if choice is None:
                 return
 
-            log = sorted_logs[choice]
+            log = visible_logs[choice]
             action = self.select_menu(
                 f"Log {choice + 1}",
                 [
@@ -964,6 +1391,7 @@ class BLogger:
         print("- Yes/No and status questions: ←/→ to move, Enter to confirm")
         print("- No is selected by default on Yes/No questions")
         print("- Press a number to jump to / select that option")
+        print("- Press f in View Logs to filter logs as you type")
         print("- Press Esc to cancel / go back")
         print("- Use arrow keys to navigate through input history")
         print("- Use backspace to delete characters")
