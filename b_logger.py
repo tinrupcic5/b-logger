@@ -24,6 +24,7 @@ class BLogger:
         self.settings_file = os.path.join(self.script_dir, "settings.json")
         self.scripts_file = os.path.join(self.script_dir, "scripts.json")
         self.running = True
+        self._exiting = False
         self.load_settings()
         self.load_logs()
         self.load_scripts()
@@ -105,7 +106,66 @@ class BLogger:
                     pass
 
     def ask(self, text: str) -> str:
-        return input(text)
+        try:
+            return input(text)
+        except EOFError:
+            self.exit_cleanly()
+
+    def exit_cleanly(self) -> None:
+        if not self._exiting:
+            print("\nExiting B-LOGGER...")
+        self._exiting = True
+        self.running = False
+        raise SystemExit(0)
+
+    def ask_line(self, prompt: str) -> Optional[str]:
+        """Read one line. Escape cancels and returns None."""
+        buffer = ""
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        try:
+            with self.term.cbreak():
+                while True:
+                    key = self.term.inkey()
+                    if not key:
+                        continue
+                    if key.name == "KEY_ESCAPE":
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
+                        return None
+                    if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
+                        return buffer
+                    if key.name in ("KEY_BACKSPACE", "KEY_DELETE") or key in ("\x7f", "\b"):
+                        if buffer:
+                            buffer = buffer[:-1]
+                            sys.stdout.write("\b \b")
+                            sys.stdout.flush()
+                        continue
+                    if key.is_sequence:
+                        continue
+                    text = str(key)
+                    if len(text) == 1 and text.isprintable():
+                        buffer += text
+                        sys.stdout.write(text)
+                        sys.stdout.flush()
+        except KeyboardInterrupt:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            raise
+
+    def read_log_index(self, prompt: str) -> Optional[int]:
+        """1-based log number from the on-screen list. None cancels."""
+        raw = self.ask_line(prompt)
+        if raw is None:
+            return None
+        text = raw.strip()
+        if not text.isdigit() or int(text) < 1:
+            print("Invalid input")
+            self.ask("\nPress Enter to continue...")
+            return None
+        return int(text) - 1
 
     def unique_tickets_newest_first(self) -> list[str]:
         seen = set()
@@ -118,14 +178,14 @@ class BLogger:
             tickets.append(ticket)
         return tickets
 
-    def matching_qi_tickets(self, query: str, catalog: Optional[list[str]] = None) -> list[str]:
-        """Existing QI logs whose text starts with query.
+    def matching_tickets(self, query: str, catalog: Optional[list[str]] = None) -> list[str]:
+        """Existing logs whose text starts with query.
 
-        Nothing is offered until the query looks like QI- plus a digit, so a bare
-        "QI-" does not dump every ticket.
+        An empty query offers nothing, so the full history is not dumped
+        before the user types. Any letter or string is enough when something matches.
         """
         folded = query.strip().casefold()
-        if len(folded) < 4 or not folded.startswith("qi-") or not folded[3].isdigit():
+        if not folded:
             return []
         source = catalog if catalog is not None else self.unique_tickets_newest_first()
         return [ticket for ticket in source if ticket.casefold().startswith(folded)]
@@ -140,12 +200,8 @@ class BLogger:
         return text[: width - 1] + "…"
 
     def ask_ticket(self, prompt: str, *, heading: str = "", note: str = "") -> str:
-        """Read a log line. QI- prefixes offer existing logs; ↑/↓ picks one, Enter writes it."""
-        catalog = [
-            ticket
-            for ticket in self.unique_tickets_newest_first()
-            if ticket.casefold().startswith("qi-")
-        ]
+        """Read a log line. Typed prefixes offer existing logs; ↑/↓ picks one, Enter writes it."""
+        catalog = self.unique_tickets_newest_first()
         buffer = ""
         cursor = 0
         selected = 0
@@ -153,7 +209,7 @@ class BLogger:
 
         def refresh_matches() -> None:
             nonlocal matches, selected
-            matches = self.matching_qi_tickets(buffer, catalog)
+            matches = self.matching_tickets(buffer, catalog)
             if selected >= len(matches):
                 selected = 0
 
@@ -451,7 +507,7 @@ class BLogger:
             if not final:
                 hint = "  ←/→  Enter"
                 if cancel_index is None:
-                    hint += "  Esc"
+                    hint += "  Esc back"
                 chunks.append(self.term.dim + hint + self.term.normal)
             sys.stdout.write("\r" + self.term.clear_eol + "".join(chunks))
             sys.stdout.flush()
@@ -489,8 +545,16 @@ class BLogger:
 
         return cancel_index
 
-    def ask_yes_no(self, prompt: str) -> bool:
-        choice = self.ask_choice(prompt, ["No", "Yes"], default_index=0, cancel_index=0)
+    def ask_yes_no(self, prompt: str, *, cancel: bool = False) -> Optional[bool]:
+        """Yes/No. With cancel, Escape leaves the question and returns None."""
+        choice = self.ask_choice(
+            prompt,
+            ["No", "Yes"],
+            default_index=0,
+            cancel_index=None if cancel else 0,
+        )
+        if choice is None:
+            return None
         return choice == 1
 
     def ask_done_status(self, prompt: str, *, allow_keep: bool = False) -> Optional[str]:
@@ -633,9 +697,7 @@ class BLogger:
         )
 
     def handle_exit(self, signum, frame):
-        print("\nExiting B-LOGGER...")
-        self.running = False
-        sys.exit(0)
+        self.exit_cleanly()
 
     def load_banner(self):
         try:
@@ -670,12 +732,19 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Create New Log" + self.term.normal)
         
-        if self.ask_yes_no("Do you want to use a different date?"):
+        different_date = self.ask_yes_no(
+            "Do you want to use a different date?",
+            cancel=True,
+        )
+        if different_date is None:
+            return
+        if different_date:
             while True:
                 try:
-                    custom_date = self.ask("Enter date (DD.MM.YYYY) or 0/exit to cancel: ")
-                    if custom_date.lower() in ['0', 'exit']:
+                    custom_date = self.ask_line("Enter date (DD.MM.YYYY, Esc back): ")
+                    if custom_date is None:
                         return
+                    custom_date = custom_date.strip()
                     datetime.strptime(custom_date, "%d.%m.%Y")
                     current_time = f"{custom_date} {datetime.now().strftime('%H:%M:%S')}"
                     break
@@ -707,8 +776,8 @@ class BLogger:
         )
         print(self.term.cyan(for_line))
 
-        hours = self.ask("Enter hours (e.g., 1h 30m or just 30m): ")
-        if hours.lower() in ['0', 'exit']:
+        hours = self.ask_line("Enter hours (e.g., 1h 30m or just 30m, Esc back): ")
+        if hours is None:
             return
 
         entered_minutes = self.parse_hours(hours)
@@ -753,7 +822,9 @@ class BLogger:
             )
             print(self.term.cyan(for_line))
 
-            new_hours = self.ask("Enter new hours: ")
+            new_hours = self.ask_line("Enter new hours (Esc back): ")
+            if new_hours is None:
+                new_hours = self.current_log["hours"]
             new_minutes = self.parse_hours(new_hours)
             remaining_after_minutes = self.daily_target_minutes() - (total_without_current + new_minutes)
             print(
@@ -773,7 +844,9 @@ class BLogger:
             if not self.ask_yes_no("Add subtask?"):
                 break
                 
-            subtask_desc = self.ask("Enter subtask description: ")
+            subtask_desc = self.ask_line("Enter subtask description (Esc back): ")
+            if subtask_desc is None or not subtask_desc.strip():
+                break
             self.current_log["subtasks"].append(subtask_desc)
             print(f"Added subtask: {subtask_desc}")
             print("Current subtasks:")
@@ -1064,10 +1137,6 @@ class BLogger:
                             choice = None
                             break
 
-                        if not finding and key == "0":
-                            choice = None
-                            break
-
                         if key.name == "KEY_UP":
                             digit_buffer = ""
                             if visible_logs:
@@ -1176,7 +1245,10 @@ class BLogger:
             current_date = self.current_log['timestamp'].split()[0]
             print(f"Current date: {current_date}")
             while True:
-                new_date = self.ask("Enter new date (DD.MM.YYYY) or leave empty to cancel: ").strip()
+                new_date = self.ask_line("Enter new date (DD.MM.YYYY, Esc back): ")
+                if new_date is None:
+                    break
+                new_date = new_date.strip()
                 if not new_date:
                     break
                 try:
@@ -1193,7 +1265,9 @@ class BLogger:
 
         if self.ask_yes_no("Do you want to edit the description?"):
             print(f"\nCurrent description: {self.current_log['ticket']}")
-            new_desc = self.ask("Enter new description: ")
+            new_desc = self.ask_line("Enter new description (Esc back): ")
+            if new_desc is None:
+                new_desc = ""
             if new_desc.strip():
                 self.current_log["ticket"] = new_desc
 
@@ -1289,30 +1363,28 @@ class BLogger:
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Edit Log" + self.term.normal)
         self.display_logs()
-        try:
-            log_index = int(self.ask("\nEnter log number to edit (0 to exit): ")) - 1
-            if log_index == -1:
-                return
+        log_index = self.read_log_index("\nEnter log number to edit (Esc back): ")
+        if log_index is None:
+            return
 
-            sorted_logs = self.get_sorted_logs()
-            if 0 <= log_index < len(sorted_logs):
-                self.edit_log_entry(sorted_logs[log_index], log_index + 1)
-        except ValueError:
+        sorted_logs = self.get_sorted_logs()
+        if 0 <= log_index < len(sorted_logs):
+            self.edit_log_entry(sorted_logs[log_index], log_index + 1)
+        else:
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
 
     def delete_log(self):
         print(self.term.clear)
         self.display_logs()
-        try:
-            log_index = int(self.ask("Enter log number to delete (0 to exit): ")) - 1
-            if log_index == -1:
-                return
+        log_index = self.read_log_index("Enter log number to delete (Esc back): ")
+        if log_index is None:
+            return
 
-            sorted_logs = self.get_sorted_logs()
-            if 0 <= log_index < len(sorted_logs):
-                self.delete_log_entry(sorted_logs[log_index], log_index + 1)
-        except ValueError:
+        sorted_logs = self.get_sorted_logs()
+        if 0 <= log_index < len(sorted_logs):
+            self.delete_log_entry(sorted_logs[log_index], log_index + 1)
+        else:
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
 
@@ -1396,7 +1468,6 @@ class BLogger:
         print("- Use arrow keys to navigate through input history")
         print("- Use backspace to delete characters")
         print("- Press Enter to confirm text inputs")
-        print("- Press 0 or type 'exit' to return to previous menu")
         print("- Press Ctrl+C to exit the program")
         
         print("\n" + self.term.underline + "Tips:" + self.term.normal)
@@ -1440,31 +1511,33 @@ class BLogger:
         if status_choice is None:
             return
         
-        try:
-            log_index = int(self.ask("\nEnter log number to mark as checked (0 to exit): ")) - 1
-            if log_index == -1:
-                return
-            
-            if 0 <= log_index < len(self.logs):
-                if status_choice in ['q', 'b']:
-                    self.logs[log_index]["q_status"] = "✅"
-                if status_choice in ['j', 'b']:
-                    self.logs[log_index]["jira_status"] = "✅"
-                
-                status_updated = []
-                if status_choice in ['q', 'b']:
-                    status_updated.append("Q")
-                if status_choice in ['j', 'b']:
-                    status_updated.append("Jira")
-                
-                print(f"\nMarked log {log_index + 1} as checked for {', '.join(status_updated)}.")
-                self.save_logs()
-                
-                if self.ask_yes_no("\nDo you want to mark another log as checked?"):
-                    self.mark_as_checked()
-        except ValueError:
+        log_index = self.read_log_index("\nEnter log number to mark as checked (Esc back): ")
+        if log_index is None:
+            return
+
+        sorted_logs = self.get_sorted_logs()
+        if not 0 <= log_index < len(sorted_logs):
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
+            return
+
+        log = sorted_logs[log_index]
+        if status_choice in ['q', 'b']:
+            log["q_status"] = "✅"
+        if status_choice in ['j', 'b']:
+            log["jira_status"] = "✅"
+
+        status_updated = []
+        if status_choice in ['q', 'b']:
+            status_updated.append("Q")
+        if status_choice in ['j', 'b']:
+            status_updated.append("Jira")
+
+        print(f"\nMarked log {log_index + 1} as checked for {', '.join(status_updated)}.")
+        self.save_logs()
+
+        if self.ask_yes_no("\nDo you want to mark another log as checked?", cancel=True):
+            self.mark_as_checked()
 
     def mark_as_unchecked(self):
         print(self.term.clear)
@@ -1475,31 +1548,33 @@ class BLogger:
         if status_choice is None:
             return
         
-        try:
-            log_index = int(self.ask("\nEnter log number to mark as unchecked (0 to exit): ")) - 1
-            if log_index == -1:
-                return
-            
-            if 0 <= log_index < len(self.logs):
-                if status_choice in ['q', 'b']:
-                    self.logs[log_index]["q_status"] = "❌"
-                if status_choice in ['j', 'b']:
-                    self.logs[log_index]["jira_status"] = "❌"
-                
-                status_updated = []
-                if status_choice in ['q', 'b']:
-                    status_updated.append("Q")
-                if status_choice in ['j', 'b']:
-                    status_updated.append("Jira")
-                
-                print(f"\nMarked log {log_index + 1} as unchecked for {', '.join(status_updated)}.")
-                self.save_logs()
-                
-                if self.ask_yes_no("\nDo you want to mark another log as unchecked?"):
-                    self.mark_as_unchecked()
-        except ValueError:
+        log_index = self.read_log_index("\nEnter log number to mark as unchecked (Esc back): ")
+        if log_index is None:
+            return
+
+        sorted_logs = self.get_sorted_logs()
+        if not 0 <= log_index < len(sorted_logs):
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
+            return
+
+        log = sorted_logs[log_index]
+        if status_choice in ['q', 'b']:
+            log["q_status"] = "❌"
+        if status_choice in ['j', 'b']:
+            log["jira_status"] = "❌"
+
+        status_updated = []
+        if status_choice in ['q', 'b']:
+            status_updated.append("Q")
+        if status_choice in ['j', 'b']:
+            status_updated.append("Jira")
+
+        print(f"\nMarked log {log_index + 1} as unchecked for {', '.join(status_updated)}.")
+        self.save_logs()
+
+        if self.ask_yes_no("\nDo you want to mark another log as unchecked?", cancel=True):
+            self.mark_as_unchecked()
 
     def mark_all_day_as_checked(self):
         while True:
@@ -1525,8 +1600,15 @@ class BLogger:
                     print(f"      {log['ticket']}{hours}  Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}")
             if not last_5_days:
                 print("  (no logs yet)")
-            date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
-            date_input = self.ask(date_prompt).strip()
+            date_prompt = (
+                f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY, Esc back): "
+                if last_5_days
+                else "\nEnter date (DD.MM.YYYY, Esc back): "
+            )
+            date_input = self.ask_line(date_prompt)
+            if date_input is None:
+                return
+            date_input = date_input.strip()
             if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
                 date_str = last_5_days[int(date_input) - 1]
             else:
@@ -1557,7 +1639,7 @@ class BLogger:
             if count > 0:
                 self.save_logs()
 
-            if not self.ask_yes_no("\nDo you want to do it for another date?"):
+            if not self.ask_yes_no("\nDo you want to do it for another date?", cancel=True):
                 return
 
     def mark_all_day_as_unchecked(self):
@@ -1584,8 +1666,15 @@ class BLogger:
                     print(f"      {log['ticket']}{hours}  Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}")
             if not last_5_days:
                 print("  (no logs yet)")
-            date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
-            date_input = self.ask(date_prompt).strip()
+            date_prompt = (
+                f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY, Esc back): "
+                if last_5_days
+                else "\nEnter date (DD.MM.YYYY, Esc back): "
+            )
+            date_input = self.ask_line(date_prompt)
+            if date_input is None:
+                return
+            date_input = date_input.strip()
             if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
                 date_str = last_5_days[int(date_input) - 1]
             else:
@@ -1616,70 +1705,75 @@ class BLogger:
             if count > 0:
                 self.save_logs()
 
-            if not self.ask_yes_no("\nDo you want to do it for another date?"):
+            if not self.ask_yes_no("\nDo you want to do it for another date?", cancel=True):
                 return
 
     def edit_subtasks(self):
         print(self.term.clear)
         print(self.term.move_y(0) + self.term.black_on_white + "Edit Subtasks" + self.term.normal)
         self.display_logs()
-        try:
-            log_index = int(self.ask("\nEnter log number to edit subtasks (0 to exit): ")) - 1
-            if log_index == -1:
-                return
-            
-            if 0 <= log_index < len(self.logs):
-                log = self.logs[log_index]
-                if not log['subtasks']:
-                    print("\nThis log has no subtasks.")
-                    self.ask("\nPress Enter to continue...")
-                    return
-                
-                print(f"\nCurrent subtasks for log {log_index + 1}:")
-                for i, subtask in enumerate(log['subtasks'], 1):
-                    print(f"{i}. {subtask}")
-                
-                while True:
-                    option = self.ask_choice(
-                        "\nWhat do you want to do?",
-                        ["Back", "Edit subtask", "Delete subtask"],
-                        default_index=0,
-                        cancel_index=0,
-                    )
-                    
-                    if option in (None, 0):
-                        break
-                    if option in (1, 2):
-                        subtask_input = self.ask("\nEnter subtask number: ").strip()
-                        try:
-                            subtask_index = int(subtask_input) - 1
-                            if 0 <= subtask_index < len(log['subtasks']):
-                                if option == 1:
-                                    print(f"\nCurrent subtask: {log['subtasks'][subtask_index]}")
-                                    new_subtask = self.ask("Enter new subtask description: ")
-                                    if new_subtask.strip():
-                                        log['subtasks'][subtask_index] = new_subtask
-                                        print("Subtask updated successfully!")
-                                    else:
-                                        print("Subtask description cannot be empty!")
-                                else:
-                                    deleted_subtask = log['subtasks'].pop(subtask_index)
-                                    print(f"Deleted subtask: {deleted_subtask}")
-                                
-                                print("\nCurrent subtasks:")
-                                for i, task in enumerate(log['subtasks'], 1):
-                                    print(f"{i}. {task}")
-                            else:
-                                print("Invalid subtask number!")
-                        except ValueError:
-                            print("Please enter a valid number!")
-                
-                self.save_logs()
-                print("\nChanges saved successfully!")
-                self.ask("\nPress Enter to continue...")
-        except ValueError:
+        log_index = self.read_log_index("\nEnter log number to edit subtasks (Esc back): ")
+        if log_index is None:
+            return
+
+        sorted_logs = self.get_sorted_logs()
+        if not 0 <= log_index < len(sorted_logs):
             print("Invalid input")
             self.ask("\nPress Enter to continue...")
+            return
+
+        log = sorted_logs[log_index]
+        if not log['subtasks']:
+            print("\nThis log has no subtasks.")
+            self.ask("\nPress Enter to continue...")
+            return
+
+        print(f"\nCurrent subtasks for log {log_index + 1}:")
+        for i, subtask in enumerate(log['subtasks'], 1):
+            print(f"{i}. {subtask}")
+
+        while True:
+            option = self.ask_choice(
+                "\nWhat do you want to do?",
+                ["Back", "Edit subtask", "Delete subtask"],
+                default_index=0,
+                cancel_index=None,
+            )
+
+            if option in (None, 0):
+                break
+            if option in (1, 2):
+                subtask_input = self.ask_line("\nEnter subtask number (Esc back): ")
+                if subtask_input is None:
+                    continue
+                try:
+                    subtask_index = int(subtask_input.strip()) - 1
+                    if 0 <= subtask_index < len(log['subtasks']):
+                        if option == 1:
+                            print(f"\nCurrent subtask: {log['subtasks'][subtask_index]}")
+                            new_subtask = self.ask_line("Enter new subtask description (Esc back): ")
+                            if new_subtask is None:
+                                continue
+                            if new_subtask.strip():
+                                log['subtasks'][subtask_index] = new_subtask
+                                print("Subtask updated successfully!")
+                            else:
+                                print("Subtask description cannot be empty!")
+                        else:
+                            deleted_subtask = log['subtasks'].pop(subtask_index)
+                            print(f"Deleted subtask: {deleted_subtask}")
+
+                        print("\nCurrent subtasks:")
+                        for i, task in enumerate(log['subtasks'], 1):
+                            print(f"{i}. {task}")
+                    else:
+                        print("Invalid subtask number!")
+                except ValueError:
+                    print("Please enter a valid number!")
+
+        self.save_logs()
+        print("\nChanges saved successfully!")
+        self.ask("\nPress Enter to continue...")
 
     def load_settings(self):
         default_settings = {
@@ -2450,8 +2544,15 @@ class BLogger:
                 print(f"      {log['ticket']}{hours}  Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}")
         if not last_5_days:
             print("  (no logs yet)")
-        date_prompt = f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY): " if last_5_days else "\nEnter date (DD.MM.YYYY): "
-        date_input = self.ask(date_prompt).strip()
+        date_prompt = (
+            f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY, Esc back): "
+            if last_5_days
+            else "\nEnter date (DD.MM.YYYY, Esc back): "
+        )
+        date_input = self.ask_line(date_prompt)
+        if date_input is None:
+            return
+        date_input = date_input.strip()
         if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
             date_str = last_5_days[int(date_input) - 1]
         else:
@@ -2757,11 +2858,15 @@ class BLogger:
                     self.running = False
                     break
 
-            except KeyboardInterrupt:
-                print("\nExiting B-LOGGER...")
-                self.running = False
-                break
+            except (KeyboardInterrupt, EOFError):
+                self.exit_cleanly()
 
 if __name__ == "__main__":
-    logger = BLogger()
-    logger.run()
+    try:
+        logger = BLogger()
+        logger.run()
+    except SystemExit:
+        raise
+    except (KeyboardInterrupt, EOFError):
+        print("\nExiting B-LOGGER...")
+        raise SystemExit(0)
