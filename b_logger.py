@@ -190,6 +190,69 @@ class BLogger:
         source = catalog if catalog is not None else self.unique_tickets_newest_first()
         return [ticket for ticket in source if ticket.casefold().startswith(folded)]
 
+    def recent_dates(self, days: int = 7) -> list[str]:
+        """Today and the previous days, newest first, as DD.MM.YYYY."""
+        today = datetime.now()
+        return [
+            (today - timedelta(days=offset)).strftime("%d.%m.%Y")
+            for offset in range(days)
+        ]
+
+    def matching_dates(self, query: str, catalog: Optional[list[str]] = None) -> list[str]:
+        """Recent dates that match what has been typed so far. Empty shows all of them."""
+        source = catalog if catalog is not None else self.recent_dates()
+        text = query.strip()
+        if not text:
+            return list(source)
+        return [date for date in source if self._date_prefix_matches(date, text)]
+
+    def _date_prefix_matches(self, date_str: str, query: str) -> bool:
+        if date_str.startswith(query):
+            return True
+        parts = query.split(".")
+        if len(parts) > 3:
+            return False
+        padded = []
+        for index, part in enumerate(parts):
+            if index < 2 and part.isdigit() and len(part) == 1:
+                padded.append("0" + part)
+            else:
+                padded.append(part)
+        candidate = ".".join(padded)
+        return candidate != query and date_str.startswith(candidate)
+
+    def _date_choice_label(self, date_str: str) -> str:
+        parsed = datetime.strptime(date_str, "%d.%m.%Y").date()
+        today = datetime.now().date()
+        if parsed == today:
+            note = "today"
+        elif parsed == today - timedelta(days=1):
+            note = "yesterday"
+        else:
+            note = (
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            )[parsed.weekday()]
+        return f"{date_str}  {note}"
+
+    def _complete_date(self, text: str) -> Optional[str]:
+        """DD.MM.YYYY, allowing a single digit for day or month. None if unfinished."""
+        parts = text.strip().split(".")
+        if len(parts) != 3 or any(part == "" or not part.isdigit() for part in parts):
+            return None
+        if len(parts[2]) != 4:
+            return None
+        day, month, year = (int(part) for part in parts)
+        try:
+            return datetime(year, month, day).strftime("%d.%m.%Y")
+        except ValueError:
+            return None
+
     def _clip_text(self, text: str, width: int) -> str:
         if width <= 0:
             return ""
@@ -459,6 +522,224 @@ class BLogger:
             sys.stdout.flush()
 
         return buffer
+
+    def ask_date(
+        self,
+        prompt: str,
+        *,
+        heading: str = "",
+        note: str = "",
+        error: str = "",
+        prefer: str = "",
+    ) -> Optional[str]:
+        """Read a date. The last 7 days stay listed newest first and shrink as you type.
+
+        ↑/↓ moves the highlight. Enter uses a finished date, otherwise the highlighted day.
+        Escape cancels and returns None.
+        """
+        catalog = self.recent_dates()
+        buffer = ""
+        cursor = 0
+        selected = 0
+        matches: list[str] = []
+
+        def refresh_matches() -> None:
+            nonlocal matches, selected
+            previous = matches[selected] if matches and 0 <= selected < len(matches) else prefer
+            matches = self.matching_dates(buffer, catalog)
+            if previous in matches:
+                selected = matches.index(previous)
+            else:
+                selected = 0
+
+        def render(committed: Optional[str] = None) -> None:
+            width = max(20, self.term.width or 80)
+            text = buffer if committed is None else committed
+            text_cursor = cursor if committed is None else len(text)
+            show_matches = committed is None and bool(matches)
+            show_typed_hint = committed is None and not matches and bool(buffer.strip())
+
+            parts = [self.term.clear, self.term.home]
+            row = 0
+            if heading:
+                parts.append(self.term.black_on_white + heading + self.term.normal + "\n")
+                row += 1
+            if note:
+                parts.append(note + "\n")
+                row += 1
+            if error:
+                parts.append(self.term.red(self._clip_text(error, max(1, width - 1))) + "\n")
+                row += 1
+            if heading or note or error:
+                parts.append("\n")
+                row += 1
+            input_row = row
+
+            room = max(1, width - len(prompt) - 1)
+            view_start = 0 if text_cursor <= room else text_cursor - room
+            visible = text[view_start:view_start + room]
+            column = min(width - 1, len(prompt) + (text_cursor - view_start))
+            parts.append(prompt + visible + self.term.clear_eol)
+
+            if show_matches:
+                height = self.term.height or 24
+                below = max(0, height - input_row - 1)
+                if below >= 2:
+                    capacity = min(8, below - 1)
+                    show_hint = True
+                else:
+                    capacity = min(1, below)
+                    show_hint = False
+                if capacity > 0:
+                    start = 0 if selected < capacity else selected - capacity + 1
+                    end = min(len(matches), start + capacity)
+                    for index in range(start, end):
+                        label = self._clip_text(
+                            self._date_choice_label(matches[index]),
+                            max(1, width - 4),
+                        )
+                        marker = ">" if index == selected else " "
+                        line = f" {marker} {label}"
+                        if index == selected:
+                            line = self.term.black_on_white(line)
+                        else:
+                            line = self.term.cyan(line)
+                        parts.append("\n" + line + self.term.clear_eol)
+                    if show_hint:
+                        hint = (
+                            f"  ↑/↓ select  ·  Enter confirm  ·  type to filter"
+                            f"  {selected + 1}/{len(matches)}"
+                        )
+                        parts.append(
+                            "\n"
+                            + self.term.dim
+                            + self._clip_text(hint, max(1, width - 1))
+                            + self.term.normal
+                            + self.term.clear_eol
+                        )
+            elif show_typed_hint:
+                hint = "  Enter keeps what you typed"
+                parts.append(
+                    "\n" + self.term.dim + hint + self.term.normal + self.term.clear_eol
+                )
+
+            if committed is None:
+                parts.append(str(self.term.move_yx(input_row, column)))
+            else:
+                parts.append("\n")
+            sys.stdout.write("".join(parts))
+            sys.stdout.flush()
+
+        def insert_text(chunk: str) -> None:
+            nonlocal buffer, cursor
+            buffer = buffer[:cursor] + chunk + buffer[cursor:]
+            cursor += len(chunk)
+            refresh_matches()
+
+        def delete_backward() -> None:
+            nonlocal buffer, cursor
+            if cursor <= 0:
+                return
+            buffer = buffer[: cursor - 1] + buffer[cursor:]
+            cursor -= 1
+            refresh_matches()
+
+        def delete_forward() -> None:
+            nonlocal buffer, cursor
+            if cursor >= len(buffer):
+                return
+            buffer = buffer[:cursor] + buffer[cursor + 1 :]
+            refresh_matches()
+
+        refresh_matches()
+        try:
+            with self.term.cbreak():
+                render()
+                while True:
+                    key = self.term.inkey()
+                    if not key:
+                        continue
+
+                    if key.name == "KEY_ESCAPE":
+                        render(committed="")
+                        return None
+
+                    if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
+                        typed = self._complete_date(buffer)
+                        if typed:
+                            render(committed=typed)
+                            return typed
+                        if matches:
+                            chosen = matches[selected]
+                            render(committed=chosen)
+                            return chosen
+                        render(committed=buffer.strip())
+                        return buffer.strip()
+
+                    if key.name == "KEY_UP":
+                        if matches and selected > 0:
+                            selected -= 1
+                            render()
+                        continue
+
+                    if key.name == "KEY_DOWN":
+                        if matches and selected < len(matches) - 1:
+                            selected += 1
+                            render()
+                        continue
+
+                    if key.name == "KEY_LEFT":
+                        if cursor > 0:
+                            cursor -= 1
+                            render()
+                        continue
+
+                    if key.name == "KEY_RIGHT":
+                        if cursor < len(buffer):
+                            cursor += 1
+                            render()
+                        continue
+
+                    if key.name == "KEY_HOME" or key == "\x01":
+                        cursor = 0
+                        render()
+                        continue
+
+                    if key.name == "KEY_END" or key == "\x05":
+                        cursor = len(buffer)
+                        render()
+                        continue
+
+                    if key.name == "KEY_BACKSPACE" or key in ("\x7f", "\b"):
+                        delete_backward()
+                        render()
+                        continue
+
+                    if key.name == "KEY_DELETE":
+                        delete_forward()
+                        render()
+                        continue
+
+                    if key == "\x15":  # ctrl-u
+                        buffer = ""
+                        cursor = 0
+                        refresh_matches()
+                        render()
+                        continue
+
+                    if key.is_sequence:
+                        continue
+
+                    text = str(key)
+                    if text.isprintable():
+                        insert_text(text)
+                        render()
+        except KeyboardInterrupt:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            raise
+
+        return buffer.strip() or None
 
     def _split_prompt(self, prompt: str) -> tuple[str, str]:
         leading = ""
@@ -739,17 +1020,23 @@ class BLogger:
         if different_date is None:
             return
         if different_date:
+            error = ""
             while True:
+                custom_date = self.ask_date(
+                    "Enter date (DD.MM.YYYY, Esc back): ",
+                    heading="Create New Log",
+                    error=error,
+                )
+                if custom_date is None:
+                    return
+                custom_date = custom_date.strip()
                 try:
-                    custom_date = self.ask_line("Enter date (DD.MM.YYYY, Esc back): ")
-                    if custom_date is None:
-                        return
-                    custom_date = custom_date.strip()
                     datetime.strptime(custom_date, "%d.%m.%Y")
-                    current_time = f"{custom_date} {datetime.now().strftime('%H:%M:%S')}"
-                    break
                 except ValueError:
-                    print("Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)")
+                    error = "Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)"
+                    continue
+                current_time = f"{custom_date} {datetime.now().strftime('%H:%M:%S')}"
+                break
         
         else:
             current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
@@ -1243,9 +1530,15 @@ class BLogger:
 
         if self.ask_yes_no("\nDo you want to edit the date?"):
             current_date = self.current_log['timestamp'].split()[0]
-            print(f"Current date: {current_date}")
+            error = ""
             while True:
-                new_date = self.ask_line("Enter new date (DD.MM.YYYY, Esc back): ")
+                new_date = self.ask_date(
+                    "Enter new date (DD.MM.YYYY, Esc back): ",
+                    heading=label,
+                    note=f"Current date: {current_date}",
+                    error=error,
+                    prefer=current_date,
+                )
                 if new_date is None:
                     break
                 new_date = new_date.strip()
@@ -1253,15 +1546,16 @@ class BLogger:
                     break
                 try:
                     datetime.strptime(new_date, "%d.%m.%Y")
-                    time_part = (
-                        self.current_log['timestamp'].split()[1]
-                        if len(self.current_log['timestamp'].split()) > 1
-                        else datetime.now().strftime('%H:%M:%S')
-                    )
-                    self.current_log["timestamp"] = f"{new_date} {time_part}"
-                    break
                 except ValueError:
-                    print("Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)")
+                    error = "Invalid date format. Please use DD.MM.YYYY (e.g., 23.04.2024)"
+                    continue
+                time_part = (
+                    self.current_log['timestamp'].split()[1]
+                    if len(self.current_log['timestamp'].split()) > 1
+                    else datetime.now().strftime('%H:%M:%S')
+                )
+                self.current_log["timestamp"] = f"{new_date} {time_part}"
+                break
 
         if self.ask_yes_no("Do you want to edit the description?"):
             print(f"\nCurrent description: {self.current_log['ticket']}")
