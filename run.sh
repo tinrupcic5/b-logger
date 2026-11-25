@@ -83,4 +83,5 @@ else
     printf "\r\033[K"
 fi
 
+printf '\033[H\033[2J'
 "$SCRIPT_DIR/venv/bin/python3" "$SCRIPT_DIR/b_logger.py"

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
-import os
-import sys
+import atexit
 import json
+import os
 import signal
+import subprocess
+import sys
+import termios
 from datetime import datetime, timedelta
 from blessed import Terminal
 from dateutil import parser
@@ -29,6 +32,7 @@ class BLogger:
         self.load_logs()
         self.load_scripts()
         self.banner = None
+        self._font_zoom = None
         self.load_banner()
         self.links = self.load_links()
         self.input_history = []
@@ -993,6 +997,165 @@ class BLogger:
         print(self.term.move_y(0))
         print(self.term.cyan(self.banner))
         print("\n")
+
+    def _osascript(self, script: str) -> Optional[str]:
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=4,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip()
+
+    def _press_font_keys(self, process_name: str, steps: int) -> bool:
+        if steps == 0:
+            return True
+        if steps > 0:
+            key = "="
+            count = steps
+        else:
+            key = "-"
+            count = -steps
+        script = (
+            'tell application "System Events"\n'
+            f'  if not (exists process "{process_name}") then error "missing"\n'
+            f'  tell process "{process_name}"\n'
+            "    set frontmost to true\n"
+            f"    repeat {count} times\n"
+            f'      keystroke "{key}" using command down\n'
+            "      delay 0.06\n"
+            "    end repeat\n"
+            "    delay 0.15\n"
+            "  end tell\n"
+            "end tell"
+        )
+        return self._osascript(script) is not None
+
+    def _terminal_font_size(self) -> Optional[float]:
+        raw = self._osascript('tell application "Terminal" to font size of front window')
+        if raw is None or raw == "":
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    def _set_terminal_font_size(self, size: float) -> bool:
+        script = f'tell application "Terminal" to set font size of front window to {size}'
+        return self._osascript(script) is not None
+
+    def _iterm_font_size(self) -> Optional[float]:
+        script = (
+            'tell application "iTerm2"\n'
+            "  tell current session of current window\n"
+            "    return font size\n"
+            "  end tell\n"
+            "end tell"
+        )
+        raw = self._osascript(script)
+        if raw is None or raw == "":
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    def _set_iterm_font_size(self, size: float) -> bool:
+        script = (
+            'tell application "iTerm2"\n'
+            "  tell current session of current window\n"
+            f"    set font size to {size}\n"
+            "  end tell\n"
+            "end tell"
+        )
+        return self._osascript(script) is not None
+
+    def _larger_font_size(self, old_size: float) -> int:
+        new_size = int(round(old_size * 1.75))
+        if new_size < int(old_size) + 4:
+            new_size = int(old_size) + 4
+        return new_size
+
+    def enlarge_text(self) -> None:
+        if not sys.stdout.isatty():
+            return
+        program = os.environ.get("TERM_PROGRAM", "")
+        if program == "" and os.environ.get("WEZTERM_PANE"):
+            program = "WezTerm"
+
+        if program == "WezTerm":
+            if self._press_font_keys("WezTerm", 6):
+                self._font_zoom = ("keys", "WezTerm", 6)
+        elif program == "Apple_Terminal":
+            old_size = self._terminal_font_size()
+            if old_size is not None:
+                new_size = self._larger_font_size(old_size)
+                if self._set_terminal_font_size(new_size):
+                    self._font_zoom = ("apple", old_size)
+        elif program == "iTerm.app" or program == "iTerm2":
+            old_size = self._iterm_font_size()
+            if old_size is not None:
+                new_size = self._larger_font_size(old_size)
+                if self._set_iterm_font_size(new_size):
+                    self._font_zoom = ("iterm", old_size)
+
+        if self._font_zoom is None:
+            return
+        try:
+            termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+        except OSError:
+            pass
+        atexit.register(self.restore_text_size)
+
+    def restore_text_size(self) -> None:
+        zoom = self._font_zoom
+        if zoom is None:
+            return
+        self._font_zoom = None
+        kind = zoom[0]
+        if kind == "keys":
+            self._press_font_keys(zoom[1], -zoom[2])
+        elif kind == "apple":
+            self._set_terminal_font_size(zoom[1])
+        elif kind == "iterm":
+            self._set_iterm_font_size(zoom[1])
+
+    def show_cover(self) -> None:
+        if self.banner:
+            lines = self.banner.splitlines()
+        else:
+            lines = ["B-LOGGER"]
+        if not lines:
+            lines = ["B-LOGGER"]
+        width = 0
+        for line in lines:
+            if len(line) > width:
+                width = len(line)
+        term_w = self.term.width or 80
+        term_h = self.term.height or 24
+        top = max(0, (term_h - len(lines)) // 2)
+        left = max(0, (term_w - width) // 2)
+        pad = " " * left
+        print(self.term.clear + self.term.home, end="")
+        if top > 0:
+            print("\n" * top, end="")
+        for line in lines:
+            print(self.term.cyan(pad + line))
+        sys.stdout.flush()
+        with self.term.cbreak(), self.term.hidden_cursor():
+            while True:
+                key = self.term.inkey()
+                if not key:
+                    continue
+                if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
+                    break
+        print(self.term.clear + self.term.home, end="")
+        sys.stdout.flush()
 
     def load_logs(self):
         if os.path.exists(self.log_file):
@@ -2820,63 +2983,133 @@ class BLogger:
         self.ask("\nPress Enter to continue...")
 
     def view_logs_for_date(self):
-        print(self.term.clear)
-        print(self.term.black_on_white + "View Logs for a Date" + self.term.normal)
+        selected = 0
+        while True:
+            dates_with_logs = sorted(
+                set(log['timestamp'].split()[0] for log in self.logs),
+                key=lambda d: datetime.strptime(d, "%d.%m.%Y"),
+                reverse=True
+            )
+            last_5_days = dates_with_logs[:5]
+            if not last_5_days:
+                selected = 0
+            elif selected >= len(last_5_days):
+                selected = len(last_5_days) - 1
+            buffer = ""
+            chosen = None
+            leave = False
 
-        dates_with_logs = sorted(
-            set(log['timestamp'].split()[0] for log in self.logs),
-            key=lambda d: datetime.strptime(d, "%d.%m.%Y"),
-            reverse=True
-        )
-        last_5_days = dates_with_logs[:5]
-        print("\nLast 5 days with logs:")
-        for idx, d in enumerate(last_5_days, 1):
-            print(f"  {idx}. {d}")
-            logs_for_day = [log for log in self.logs if log['timestamp'].split()[0] == d]
-            for log in logs_for_day:
-                hours = f" ({log['hours']})" if log.get('hours') else ""
-                print(f"      {log['ticket']}{hours}  Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}")
-        if not last_5_days:
-            print("  (no logs yet)")
-        date_prompt = (
-            f"\nEnter date (1-{len(last_5_days)} or DD.MM.YYYY, Esc back): "
-            if last_5_days
-            else "\nEnter date (DD.MM.YYYY, Esc back): "
-        )
-        date_input = self.ask_line(date_prompt)
-        if date_input is None:
-            return
-        date_input = date_input.strip()
-        if last_5_days and date_input in [str(i) for i in range(1, len(last_5_days) + 1)]:
-            date_str = last_5_days[int(date_input) - 1]
-        else:
-            date_str = date_input
-        try:
-            datetime.strptime(date_str, "%d.%m.%Y")
-        except ValueError:
-            print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
-            self.ask("\nPress Enter to continue...")
-            return
+            def render() -> None:
+                print(self.term.clear + self.term.home, end="")
+                print(self.term.black_on_white + "View Logs for a Date" + self.term.normal)
+                print("\nLast 5 days with logs:")
+                if not last_5_days:
+                    print("  (no logs yet)")
+                for index, day in enumerate(last_5_days):
+                    label = f"{index + 1}. {day}"
+                    if index == selected:
+                        print(self.term.black_on_white(f" > {label} ") + self.term.normal)
+                    else:
+                        print(f"   {label}")
+                    for log in self.logs:
+                        if log['timestamp'].split()[0] != day:
+                            continue
+                        hours = f" ({log['hours']})" if log.get('hours') else ""
+                        print(
+                            f"      {log['ticket']}{hours}  "
+                            f"Q:{log.get('q_status', '❌')} Jira:{log.get('jira_status', '❌')}"
+                        )
+                print()
+                if last_5_days:
+                    prompt = f"Enter date (1-{len(last_5_days)} or DD.MM.YYYY, Esc back): "
+                else:
+                    prompt = "Enter date (DD.MM.YYYY, Esc back): "
+                sys.stdout.write(prompt + buffer)
+                sys.stdout.flush()
 
-        found = False
-        output_lines = []
-        for log in self.logs:
-            log_date = log['timestamp'].split()[0]
-            if log_date == date_str:
-                if not found:
-                    output_lines.append(date_str)
-                    found = True
-                ticket_line = log['ticket']
-                if log['hours']:
-                    ticket_line += f" ({log['hours']})"
-                output_lines.append(ticket_line)
-                for sub in log.get('subtasks', []):
-                    output_lines.append(f"   └─ {sub}")
-        if not found:
-            print(f"\nNo logs found for {date_str}.")
-        else:
-            print("\n" + "\n".join(output_lines))
-        self.ask("\nPress Enter to continue...")
+            try:
+                with self.term.cbreak():
+                    while True:
+                        render()
+                        key = self.term.inkey()
+                        if not key:
+                            continue
+                        if key.name == "KEY_ESCAPE":
+                            sys.stdout.write("\n")
+                            sys.stdout.flush()
+                            leave = True
+                            break
+                        if key.name == "KEY_UP":
+                            if last_5_days:
+                                selected = (selected - 1) % len(last_5_days)
+                            continue
+                        if key.name == "KEY_DOWN":
+                            if last_5_days:
+                                selected = (selected + 1) % len(last_5_days)
+                            continue
+                        if key.name in ("KEY_ENTER", "KEY_RETURN") or key in ("\n", "\r"):
+                            text = buffer.strip()
+                            sys.stdout.write("\n")
+                            sys.stdout.flush()
+                            if text == "":
+                                if not last_5_days:
+                                    continue
+                                chosen = last_5_days[selected]
+                                break
+                            picked = None
+                            if text.isdigit():
+                                number = int(text)
+                                if 1 <= number <= len(last_5_days):
+                                    picked = number - 1
+                            if picked is not None:
+                                chosen = last_5_days[picked]
+                            else:
+                                chosen = text
+                            break
+                        if key.name in ("KEY_BACKSPACE", "KEY_DELETE") or key in ("\x7f", "\b"):
+                            buffer = buffer[:-1]
+                            continue
+                        if key.is_sequence:
+                            continue
+                        character = str(key)
+                        if len(character) == 1 and character.isprintable():
+                            buffer += character
+            except KeyboardInterrupt:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                raise
+
+            if leave:
+                return
+            if chosen is None:
+                continue
+
+            try:
+                datetime.strptime(chosen, "%d.%m.%Y")
+            except ValueError:
+                print("Invalid date format. Please use 1-5 or DD.MM.YYYY.")
+                self.ask("\nPress Enter to return to the list...")
+                continue
+
+            found = False
+            output_lines = []
+            for log in self.logs:
+                log_date = log['timestamp'].split()[0]
+                if log_date == chosen:
+                    if not found:
+                        output_lines.append(chosen)
+                        found = True
+                    ticket_line = log['ticket']
+                    if log['hours']:
+                        ticket_line += f" ({log['hours']})"
+                    output_lines.append(ticket_line)
+                    for sub in log.get('subtasks', []):
+                        output_lines.append(f"   └─ {sub}")
+            if not found:
+                print(f"\nNo logs found for {chosen}.")
+            else:
+                print("\n" + "\n".join(output_lines))
+            self.ask("\nPress Enter to return to the list...")
 
     def list_available_sprints(self):
         print(self.term.clear)
@@ -3005,155 +3238,159 @@ class BLogger:
         self.ask("\nPress Enter to continue...")
 
     def run(self):
-        while self.running:
-            try:
-                banner = self.term.cyan(self.banner) if self.banner else None
-                choice = self.select_menu(
-                    "B-Logger",
-                    [
-                        ("1", "Logs"),
-                        ("2", "Sprint"),
-                        ("3", "Migration script"),
-                        ("4", "Important Links"),
-                        ("5", "Settings"),
-                        ("6", "Help"),
-                        ("7", "Statistics"),
-                        ("8", "About"),
-                        ("9", "Exit"),
-                    ],
-                    preamble=banner,
-                )
-
-                if choice is None:
-                    continue
-
-                if choice == "1":
-                    while True:
-                        subchoice = self.select_menu(
-                            "Logs Menu",
+        try:
+            with self.term.fullscreen():
+                self.enlarge_text()
+                self.show_cover()
+                while self.running:
+                    try:
+                        choice = self.select_menu(
+                            "B-Logger",
                             [
-                                ("1", "Create log"),
-                                ("2", "View logs"),
-                                ("3", "Edit log"),
-                                ("4", "Delete log"),
-                                ("5", "Mark as checked"),
-                                ("6", "Mark as unchecked"),
-                                ("7", "Edit subtasks"),
-                                ("8", "View logs for a date"),
-                                ("9", "Mark all day as checked"),
-                                ("10", "Mark all day as unchecked"),
-                                ("0", "Back to main menu"),
+                                ("1", "Logs"),
+                                ("2", "Sprint"),
+                                ("3", "Migration script"),
+                                ("4", "Important Links"),
+                                ("5", "Settings"),
+                                ("6", "Help"),
+                                ("7", "Statistics"),
+                                ("8", "About"),
+                                ("9", "Exit"),
                             ],
                         )
-                        if subchoice in (None, "0"):
+
+                        if choice is None:
+                            continue
+
+                        if choice == "1":
+                            while True:
+                                subchoice = self.select_menu(
+                                    "Logs Menu",
+                                    [
+                                        ("1", "Create log"),
+                                        ("2", "View logs"),
+                                        ("3", "Edit log"),
+                                        ("4", "Delete log"),
+                                        ("5", "Mark as checked"),
+                                        ("6", "Mark as unchecked"),
+                                        ("7", "Edit subtasks"),
+                                        ("8", "View logs for a date"),
+                                        ("9", "Mark all day as checked"),
+                                        ("10", "Mark all day as unchecked"),
+                                        ("0", "Back to main menu"),
+                                    ],
+                                )
+                                if subchoice in (None, "0"):
+                                    break
+                                elif subchoice == "1":
+                                    self.create_new_log()
+                                elif subchoice == "2":
+                                    self.view_logs()
+                                elif subchoice == "3":
+                                    self.edit_log()
+                                elif subchoice == "4":
+                                    self.delete_log()
+                                elif subchoice == "5":
+                                    self.mark_as_checked()
+                                elif subchoice == "6":
+                                    self.mark_as_unchecked()
+                                elif subchoice == "7":
+                                    self.edit_subtasks()
+                                elif subchoice == "8":
+                                    self.view_logs_for_date()
+                                elif subchoice == "9":
+                                    self.mark_all_day_as_checked()
+                                elif subchoice == "10":
+                                    self.mark_all_day_as_unchecked()
+
+                        elif choice == "2":
+                            while True:
+                                subchoice = self.select_menu(
+                                    "Sprint Menu",
+                                    [
+                                        ("1", "View current sprint"),
+                                        ("2", "View sprint by date"),
+                                        ("3", "View sprint history"),
+                                        ("0", "Back to main menu"),
+                                    ],
+                                )
+                                if subchoice in (None, "0"):
+                                    break
+                                elif subchoice == "1":
+                                    self.view_sprint_logs()
+                                elif subchoice == "2":
+                                    selected_sprint = self.list_available_sprints()
+                                    if selected_sprint is not None:
+                                        self.view_specific_sprint(selected_sprint)
+                                elif subchoice == "3":
+                                    self.view_sprint_history()
+
+                        elif choice == "3":
+                            while True:
+                                subchoice = self.select_menu(
+                                    "Migration Script Menu",
+                                    [
+                                        ("1", "Create migration script"),
+                                        ("2", "View migration scripts"),
+                                        ("3", "Edit migration script"),
+                                        ("4", "Delete migration script"),
+                                        ("0", "Back to main menu"),
+                                    ],
+                                )
+                                if subchoice in (None, "0"):
+                                    break
+                                elif subchoice == "1":
+                                    self.log_migration_script()
+                                elif subchoice == "2":
+                                    self.view_migration_scripts()
+                                elif subchoice == "3":
+                                    self.edit_migration_script()
+                                elif subchoice == "4":
+                                    self.delete_migration_script()
+
+                        elif choice == "4":
+                            while True:
+                                subchoice = self.select_menu(
+                                    "Important Links Menu",
+                                    [
+                                        ("1", "Add link"),
+                                        ("2", "View links"),
+                                        ("3", "Edit link"),
+                                        ("4", "Delete link"),
+                                        ("0", "Back to main menu"),
+                                    ],
+                                )
+                                if subchoice in (None, "0"):
+                                    break
+                                elif subchoice == "1":
+                                    self.add_link()
+                                elif subchoice == "2":
+                                    self.view_links()
+                                elif subchoice == "3":
+                                    self.edit_link()
+                                elif subchoice == "4":
+                                    self.delete_link()
+
+                        elif choice == "5":
+                            self.manage_settings()
+
+                        elif choice == "6":
+                            self.display_help()
+
+                        elif choice == "7":
+                            self.display_statistics()
+
+                        elif choice == "8":
+                            self.display_about()
+
+                        elif choice == "9":
+                            self.running = False
                             break
-                        elif subchoice == "1":
-                            self.create_new_log()
-                        elif subchoice == "2":
-                            self.view_logs()
-                        elif subchoice == "3":
-                            self.edit_log()
-                        elif subchoice == "4":
-                            self.delete_log()
-                        elif subchoice == "5":
-                            self.mark_as_checked()
-                        elif subchoice == "6":
-                            self.mark_as_unchecked()
-                        elif subchoice == "7":
-                            self.edit_subtasks()
-                        elif subchoice == "8":
-                            self.view_logs_for_date()
-                        elif subchoice == "9":
-                            self.mark_all_day_as_checked()
-                        elif subchoice == "10":
-                            self.mark_all_day_as_unchecked()
 
-                elif choice == "2":
-                    while True:
-                        subchoice = self.select_menu(
-                            "Sprint Menu",
-                            [
-                                ("1", "View current sprint"),
-                                ("2", "View sprint by date"),
-                                ("3", "View sprint history"),
-                                ("0", "Back to main menu"),
-                            ],
-                        )
-                        if subchoice in (None, "0"):
-                            break
-                        elif subchoice == "1":
-                            self.view_sprint_logs()
-                        elif subchoice == "2":
-                            selected_sprint = self.list_available_sprints()
-                            if selected_sprint is not None:
-                                self.view_specific_sprint(selected_sprint)
-                        elif subchoice == "3":
-                            self.view_sprint_history()
-
-                elif choice == "3":
-                    while True:
-                        subchoice = self.select_menu(
-                            "Migration Script Menu",
-                            [
-                                ("1", "Create migration script"),
-                                ("2", "View migration scripts"),
-                                ("3", "Edit migration script"),
-                                ("4", "Delete migration script"),
-                                ("0", "Back to main menu"),
-                            ],
-                        )
-                        if subchoice in (None, "0"):
-                            break
-                        elif subchoice == "1":
-                            self.log_migration_script()
-                        elif subchoice == "2":
-                            self.view_migration_scripts()
-                        elif subchoice == "3":
-                            self.edit_migration_script()
-                        elif subchoice == "4":
-                            self.delete_migration_script()
-
-                elif choice == "4":
-                    while True:
-                        subchoice = self.select_menu(
-                            "Important Links Menu",
-                            [
-                                ("1", "Add link"),
-                                ("2", "View links"),
-                                ("3", "Edit link"),
-                                ("4", "Delete link"),
-                                ("0", "Back to main menu"),
-                            ],
-                        )
-                        if subchoice in (None, "0"):
-                            break
-                        elif subchoice == "1":
-                            self.add_link()
-                        elif subchoice == "2":
-                            self.view_links()
-                        elif subchoice == "3":
-                            self.edit_link()
-                        elif subchoice == "4":
-                            self.delete_link()
-
-                elif choice == "5":
-                    self.manage_settings()
-
-                elif choice == "6":
-                    self.display_help()
-
-                elif choice == "7":
-                    self.display_statistics()
-
-                elif choice == "8":
-                    self.display_about()
-
-                elif choice == "9":
-                    self.running = False
-                    break
-
-            except (KeyboardInterrupt, EOFError):
-                self.exit_cleanly()
+                    except (KeyboardInterrupt, EOFError):
+                        self.exit_cleanly()
+        finally:
+            self.restore_text_size()
 
 if __name__ == "__main__":
     try:
